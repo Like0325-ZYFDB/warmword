@@ -1397,13 +1397,24 @@ def main():
             _win.events.shown += (lambda n=_name: make_tool_window(n))
         except Exception:
             pass
-    # 任何窗口都不许被真正关闭（关掉一个窗口会让程序丢掉界面）
-    def _block_close():
-        log("[窗口] 拦截关闭请求（用托盘退出程序）")
-        return False
-    for _win in WINDOWS.values():
+    # 关闭按钮 = 收起窗口（挪到屏幕外），程序继续在托盘运行
+    def _close_to_tray(name):
+        def handler():
+            try:
+                position_window(name, OFFSCREEN[0], OFFSCREEN[1], show=True)
+                if name == "float":
+                    with STATE.lock:
+                        STATE.float_visible = False
+                        STATE.float_pinned = False
+                log(f"[窗口] 关闭 {name} → 收起（程序仍在托盘）")
+            except Exception as e:
+                log(f"[窗口] 收起 {name} 失败 {e!r}")
+            return False  # 不让界面库真正销毁窗口
+        return handler
+
+    for _name, _win in WINDOWS.items():
         try:
-            _win.events.closing += _block_close
+            _win.events.closing += _close_to_tray(_name)
         except Exception:
             pass
     webview.start()
