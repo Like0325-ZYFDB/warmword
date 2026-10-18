@@ -108,12 +108,14 @@ DEFAULT_CONFIG = {
         "capture": "ctrl+alt+a",
         "toggle_auto": "ctrl+alt+s",
         "add_vocab": "ctrl+shift+a",
+        "quit": "ctrl+alt+q",
     },
     "auto_capture": True,
     "capture_only_english": True,
     "hover_delay_ms": 600,
     "online_translate": True,
     "autostart": True,
+    "hide_tray_icon": False,
     "accent": "us",
 }
 
@@ -1012,6 +1014,10 @@ def on_hotkey(action: str):
     elif action == "add_vocab":
         with STATE.lock:
             STATE.pending_task = "add_vocab"
+    elif action == "quit":
+        log("[退出] 收到退出快捷键")
+        STATE.quit = True
+        os._exit(0)
     elif action == "toggle_auto":
         toggle_auto()
 
@@ -1027,6 +1033,56 @@ def _lookup_and_show(word: str):
         show_float_near_cursor(word, entries)
 
 
+HOST_HWND = {"hwnd": 0}
+
+
+def host_window() -> int:
+    """创建一个从不显示的宿主窗口，界面窗口挂在它下面就不会出现在任务栏。"""
+    if HOST_HWND["hwnd"]:
+        return HOST_HWND["hwnd"]
+    try:
+        # 句柄是 64 位，必须声明类型，否则会被截断导致创建失败
+        kernel32.GetModuleHandleW.restype = ctypes.c_void_p
+        kernel32.GetModuleHandleW.argtypes = [ctypes.c_wchar_p]
+        user32.CreateWindowExW.restype = ctypes.c_void_p
+        user32.CreateWindowExW.argtypes = [
+            ctypes.c_ulong, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_ulong,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+        ]
+        hinst = kernel32.GetModuleHandleW(None)
+        hwnd = user32.CreateWindowExW(0, "STATIC", "WarmWordHost", 0,
+                                      0, 0, 0, 0, None, None, hinst, None)
+        HOST_HWND["hwnd"] = int(hwnd or 0)
+        log(f"[任务栏] 宿主窗口 hwnd={HOST_HWND['hwnd']}")
+    except Exception as e:
+        log(f"[任务栏] 宿主窗口创建失败 {e!r}")
+        HOST_HWND["hwnd"] = 0
+    return HOST_HWND["hwnd"]
+
+
+def detach_from_taskbar(name: str) -> bool:
+    """把窗口从任务栏彻底摘掉：挂在隐藏宿主下 + 工具窗口样式 + 强制任务栏刷新。"""
+    hwnd = user32.FindWindowW(None, WINDOW_TITLES[name])
+    if not hwnd:
+        return False
+    try:
+        user32.GetWindowLongPtrW.restype = ctypes.c_void_p
+        user32.GetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        user32.SetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
+        host = host_window()
+        if host:
+            user32.SetWindowLongPtrW(hwnd, -8, ctypes.c_void_p(host))  # GWLP_HWNDPARENT
+        ex = int(user32.GetWindowLongPtrW(hwnd, -20) or 0)
+        # 关键：清掉「应用窗口」标志（WinForms 默认会加，它优先于工具窗口，导致任务栏照显示）
+        ex = (ex | 0x00000080 | 0x08000000) & ~0x00040000
+        user32.SetWindowLongPtrW(hwnd, -20, ctypes.c_void_p(ex))
+        return True
+    except Exception as e:
+        log(f"[任务栏] {name} 脱钩失败 {e!r}")
+        return False
+
+
 def make_tool_window(name: str) -> bool:
     """让窗口成为「工具窗口」：不出现在任务栏、不进 Alt+Tab、不抢焦点。"""
     hwnd = user32.FindWindowW(None, WINDOW_TITLES[name])
@@ -1040,8 +1096,8 @@ def make_tool_window(name: str) -> bool:
         user32.GetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int]
         user32.SetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
         ex = int(user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE) or 0)
-        if not (ex & WS_EX_TOOLWINDOW):
-            ex = ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+        if not (ex & WS_EX_TOOLWINDOW) or (ex & 0x00040000):
+            ex = (ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & ~0x00040000
             user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ctypes.c_void_p(ex))
         # 通知系统刷新窗口框架，任务栏立刻撤掉图标
         user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
@@ -1053,19 +1109,26 @@ def make_tool_window(name: str) -> bool:
 
 
 def init_windows():
-    """三个窗口就位：全放屏幕外待命（隐藏会停页面脚本，所以用屏幕外常驻）。"""
+    """窗口初始化：先隐藏状态下挂好「不进任务栏」的样式，再显示到屏幕外待命。"""
     FLOAT_HWND["hwnd"] = 0
-    for name in ("float", "lookup", "translate", "vocab"):
-        win = WINDOWS.get(name)
-        if win is None:
+    names = ("float", "lookup", "translate", "vocab")
+    for name in names:
+        if WINDOWS.get(name) is None:
+            continue
+        try:
+            make_tool_window(name)
+            detach_from_taskbar(name)
+        except Exception as e:
+            log(f"[窗口] {name} 样式设置失败: {e!r}")
+    for name in names:
+        if WINDOWS.get(name) is None:
             continue
         try:
             position_window(name, OFFSCREEN[0], OFFSCREEN[1], show=True)
-            make_tool_window(name)
             round_window(name)
         except Exception as e:
-            log(f"[窗口] {name} 初始化失败: {e!r}")
-    log("[窗口] 三个窗口就位（屏幕外待命，不进任务栏）")
+            log(f"[窗口] {name} 就位失败: {e!r}")
+    log("[窗口] 四个窗口就位（屏幕外待命，已从任务栏摘除）")
 
 
 def toggle_auto():
@@ -1266,6 +1329,11 @@ def tray_thread():
     import pystray
     from pystray import MenuItem as Item
 
+    # 允许完全隐藏托盘图标（此时用 Ctrl+Alt+Q 退出程序）
+    if CONFIG.get("hide_tray_icon"):
+        log("[托盘] 配置为隐藏托盘图标；退出请按 Ctrl+Alt+Q")
+        return
+
     def on_lookup(icon, item):
         show_lookup()
 
@@ -1279,6 +1347,15 @@ def tray_thread():
 
     def on_vocab(icon, item):
         show_vocab()
+
+    def on_hide_tray(icon, item):
+        CONFIG["hide_tray_icon"] = True
+        save_config()
+        log("[托盘] 已隐藏托盘图标（退出按 Ctrl+Alt+Q，想恢复把 config.json 里 hide_tray_icon 改 false）")
+        try:
+            icon.stop()
+        except Exception:
+            pass
 
     def on_toggle(icon, item):
         toggle_auto()
@@ -1312,6 +1389,7 @@ def tray_thread():
         Item("开机自启", on_autostart, checked=lambda item: autostart_enabled()),
         pystray.Menu.SEPARATOR,
         Item("自检（生成报告）", on_selfcheck),
+        Item("隐藏托盘图标（退出用 Ctrl+Alt+Q）", on_hide_tray),
         Item("退出", on_quit),
     )
     TRAY_ICON = pystray.Icon("warmword", make_tray_icon(), "暖词 · 取词助手", menu)
@@ -1379,22 +1457,25 @@ def main():
     WINDOWS["float"] = webview.create_window(
         WINDOW_TITLES["float"], html=float_html, js_api=API,
         width=440, height=360, frameless=True, easy_drag=True,
-        on_top=True, x=OFFSCREEN[0], y=OFFSCREEN[1])
+        on_top=True, hidden=True)
     WINDOWS["lookup"] = webview.create_window(
         WINDOW_TITLES["lookup"], html=lookup_html, js_api=API,
-        width=600, height=660, on_top=True, x=OFFSCREEN[0], y=OFFSCREEN[1])
+        width=600, height=660, on_top=True, hidden=True)
     WINDOWS["translate"] = webview.create_window(
         WINDOW_TITLES["translate"], html=translate_html, js_api=API,
-        width=620, height=560, on_top=True, x=OFFSCREEN[0], y=OFFSCREEN[1])
+        width=620, height=560, on_top=True, hidden=True)
     WINDOWS["vocab"] = webview.create_window(
         WINDOW_TITLES["vocab"], html=vocab_html, js_api=API,
-        width=760, height=780, on_top=True, x=OFFSCREEN[0], y=OFFSCREEN[1])
+        width=760, height=780, on_top=True, hidden=True)
 
     threading.Timer(1.0, init_windows).start()
     # 窗口每次显示时再兜底一次，避免任务栏出现图标
     for _name, _win in WINDOWS.items():
+        def _on_shown(n=_name):
+            make_tool_window(n)
+            detach_from_taskbar(n)
         try:
-            _win.events.shown += (lambda n=_name: make_tool_window(n))
+            _win.events.shown += _on_shown
         except Exception:
             pass
     # 关闭按钮 = 收起窗口（挪到屏幕外），程序继续在托盘运行

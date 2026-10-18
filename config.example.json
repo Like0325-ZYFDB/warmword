@@ -1,25 +1,25 @@
 {
   "dictionaries": [
     {
-      "path": "C:\\词典\\oaldpe.mdx",
+      "path": "C:\\Users\\lk\\AppData\\Roaming\\Francochinois\\eudic\\oaldpe.mdx",
       "name": "牛津高阶"
     },
     {
-      "path": "C:\\词典\\麦克米伦高阶英汉双解.mdx",
+      "path": "C:\\Users\\lk\\AppData\\Roaming\\Francochinois\\eudic\\麦克米伦高阶英汉双解词典(1).mdx",
       "name": "麦克米伦英汉双解"
+    },
+    {
+      "path": "C:\\Users\\lk\\AppData\\Roaming\\Francochinois\\eudic\\oaldZhEn.mdx",
+      "name": "牛津汉英"
     }
   ],
   "hotkeys": {
     "lookup": "ctrl+alt+d",
     "translate": "ctrl+alt+t",
     "capture": "ctrl+alt+a",
-    "toggle_auto": "ctrl+alt+s",
-    "add_vocab": "ctrl+shift+a"
+    "toggle_auto": "ctrl+alt+s"
   },
   "auto_capture": true,
-  "capture_only_english": true,
   "hover_delay_ms": 600,
-  "online_translate": true,
-  "autostart": true,
-  "accent": "us"
+  "online_translate": true
 }
