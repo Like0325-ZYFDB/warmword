@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: linear-gradient(165deg, #faf6ee 0%, #f5eddd 100%);
+    font-family: "Microsoft YaHei", sans-serif;
+    color: #3d3229; font-size: 13px;
+  }
+  .wrap { padding: 14px 16px 10px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+  .title {
+    font-family: "KaiTi", "STKaiti", serif; font-size: 18px; color: #7a5c3e;
+    letter-spacing: 2px; margin-bottom: 8px; flex: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .title .deco { color: #c2a06a; font-size: 14px; }
+  .title .tip { font-family: "Microsoft YaHei"; font-size: 11.5px; color: #a08c6e; letter-spacing: 0; }
+  .bar {
+    flex: none; margin-bottom: 8px; padding: 7px 12px; border-radius: 9px;
+    font-size: 12.5px; display: none;
+  }
+  .bar.ok { display: block; background: #eef7e6; border: 1px solid #bcd9a3; color: #4a7a2b; }
+  .bar.err { display: block; background: #fdeeee; border: 1px solid #e6b4b4; color: #a33; }
+  .body { flex: 1; overflow-y: auto; padding-right: 4px; }
+  .body::-webkit-scrollbar { width: 7px; }
+  .body::-webkit-scrollbar-thumb { background: #d8cbb2; border-radius: 4px; }
+  .card {
+    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 13px;
+    padding: 11px 14px; margin-bottom: 10px;
+  }
+  .card h3 {
+    margin: 0 0 8px; font-family: "KaiTi", serif; font-size: 15px; color: #6b4a2b;
+    font-weight: 700; letter-spacing: 1px; display: flex; align-items: center; gap: 7px;
+  }
+  .card h3 .hint { font-family: "Microsoft YaHei"; font-size: 11px; color: #a08c6e; font-weight: 400; letter-spacing: 0; margin-left: auto; }
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0; border-bottom: 1px dashed #efe5cf;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .lbl { flex: none; width: 128px; font-size: 12.5px; color: #4a3b2c; }
+  .row .sub { display: block; font-size: 11px; color: #a08c6e; margin-top: 1px; }
+  .row .grow { flex: 1; min-width: 0; }
+  .key {
+    font-family: "Consolas", monospace; font-size: 12px; letter-spacing: .5px;
+    min-width: 132px; text-align: center;
+    border: 1px solid #d9c8a6; background: #fffaf0; color: #7a5c3e;
+    border-radius: 8px; padding: 5px 10px; cursor: pointer;
+  }
+  .key:hover { border-color: #b06a3f; color: #b06a3f; }
+  .key.listen { background: #fdf1e0; border-color: #b06a3f; color: #b06a3f; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.ok { background: #7cb342; }
+  .dot.bad { background: #d9534f; }
+  .dot.none { background: #d8cbb2; }
+  .btn {
+    border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45;
+    border-radius: 9px; padding: 4px 12px; font-size: 12px; cursor: pointer;
+    font-family: "Microsoft YaHei", sans-serif;
+  }
+  .btn:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
+  .btn.primary { background: #b06a3f; color: #fff; border-color: #b06a3f; padding: 6px 20px; font-size: 13px; }
+  .btn.primary:hover { background: #9a5834; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .dict {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px; margin-bottom: 6px;
+    background: #fdf9ef; border: 1px solid #eee2c9; border-radius: 10px;
+  }
+  .dict .dn { flex: none; width: 150px; font-size: 12.5px; color: #6b4a2b; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dict .dm { flex: 1; font-size: 11.5px; color: #8a7a62; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dict .ops { display: flex; gap: 4px; }
+  .dict .ops .btn { padding: 2px 8px; font-size: 11.5px; }
+  .dim { color: #a08c6e; font-size: 12px; padding: 4px 0; }
+  .sw { position: relative; display: inline-block; width: 40px; height: 22px; flex: none; }
+  .sw input { opacity: 0; width: 0; height: 0; }
+  .sw span {
+    position: absolute; inset: 0; background: #ded2bb; border-radius: 22px;
+    transition: .18s; cursor: pointer;
+  }
+  .sw span:before {
+    content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
+    background: #fffdf7; border-radius: 50%; transition: .18s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.18);
+  }
+  .sw input:checked + span { background: #b06a3f; }
+  .sw input:checked + span:before { transform: translateX(18px); }
+  input[type=range] { -webkit-appearance: none; width: 200px; height: 4px; border-radius: 3px; background: #e8dcc4; outline: none; }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%;
+    background: #b06a3f; cursor: pointer; border: 2px solid #fffdf7;
+    box-shadow: 0 1px 4px rgba(0,0,0,.2);
+  }
+  .val { font-family: "Consolas", monospace; font-size: 12px; color: #8a6a45; margin-left: 8px; }
+  .seg { display: flex; gap: 5px; }
+  .seg button {
+    border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45;
+    border-radius: 8px; padding: 3px 13px; font-size: 12px; cursor: pointer;
+    font-family: "Microsoft YaHei";
+  }
+  .seg button.on { background: #b06a3f; color: #fff; border-color: #b06a3f; }
+  .foot { flex: none; display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid #eadfc7; }
+  .foot .state { flex: 1; font-size: 11.5px; color: #a08c6e; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title"><span class="deco">✿</span>暖词 · 设置<span class="deco">✎</span>
+    <span class="tip">改完点右下角「保存并应用」</span>
+  </div>
+  <div class="bar" id="bar"></div>
+
+  <div class="body">
+    <div class="card">
+      <h3>快捷键 <span class="hint">点键位后直接按新组合键</span></h3>
+      <div id="keys"></div>
+      <div class="row" style="border:none;padding-top:8px">
+        <div class="lbl" style="width:auto;color:#a08c6e;font-size:11.5px">绿色=注册正常　红色=被其他软件占用</div>
+        <div class="grow"></div>
+        <button class="btn" onclick="resetKeys()">恢复默认</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>词典 <span class="hint" id="dictHint"></span></h3>
+      <div id="dicts"></div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="btn" onclick="addDict()">＋ 添加词典文件</button>
+        <span class="dim" id="dictNote">支持 .mdx 格式（欧陆、GoldenDict 用的是同一种）</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>取词习惯</h3>
+      <div class="row">
+        <div class="lbl">鼠标自动取词<span class="sub">停在单词上就弹释义</span></div>
+        <div class="grow"></div>
+        <label class="sw"><input type="checkbox" id="autoCapture"><span></span></label>
+      </div>
+      <div class="row">
+        <div class="lbl">只取英文单词<span class="sub">中文不弹窗，走查词窗</span></div>
+        <div class="grow"></div>
+        <label class="sw"><input type="checkbox" id="onlyEnglish"><span></span></label>
+      </div>
+      <div class="row">
+        <div class="lbl">悬停触发延时<span class="sub">停多久才取词</span></div>
+        <div class="grow"></div>
+        <input type="range" id="hoverDelay" min="300" max="1500" step="100">
+        <span class="val" id="hoverVal">600 毫秒</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>翻译与发音</h3>
+      <div class="row">
+        <div class="lbl">联网整句翻译<span class="sub">关掉就只用本地词典</span></div>
+        <div class="grow"></div>
+        <label class="sw"><input type="checkbox" id="onlineTranslate"><span></span></label>
+      </div>
+      <div class="row">
+        <div class="lbl">默认发音<span class="sub">浮窗发音按钮的默认口音</span></div>
+        <div class="grow"></div>
+        <div class="seg" id="accentSeg">
+          <button data-accent="uk">英式</button>
+          <button data-accent="us">美式</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>其他</h3>
+      <div class="row">
+        <div class="lbl">开机自动启动</div>
+        <div class="grow"></div>
+        <label class="sw"><input type="checkbox" id="autostart"><span></span></label>
+      </div>
+      <div class="row">
+        <div class="lbl">隐藏托盘图标<span class="sub">之后用 Ctrl+Alt+Q 退出</span></div>
+        <div class="grow"></div>
+        <label class="sw"><input type="checkbox" id="hideTray"><span></span></label>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="state" id="state">设置会写入程序目录的 config.json</div>
+    <button class="btn" onclick="closeMe()">关闭</button>
+    <button class="btn primary" id="saveBtn" onclick="saveAll()">保存并应用</button>
+  </div>
+</div>
+
+<script>
+  var DEFAULT_KEYS = {
+    lookup: "ctrl+alt+d",
+    translate: "ctrl+alt+t",
+    capture: "ctrl+alt+a",
+    toggle_auto: "ctrl+alt+s",
+    add_vocab: "ctrl+shift+a",
+    quit: "ctrl+alt+q"
+  };
+  var KEY_LABELS = {
+    lookup: ["快捷查词", "打开查词窗"],
+    translate: ["翻译选中内容", "选中文字后按下"],
+    capture: ["立即取词", "取鼠标下的词"],
+    toggle_auto: ["自动取词开关", "开 / 关"],
+    add_vocab: ["收藏生词", "把当前词收进生词本"],
+    quit: ["退出程序", "完全关闭"]
+  };
+  var data = { hotkeys: {}, dictionaries: [], accent: "us" };
+  var listening = null;
+
+  function esc(s) {
+    return (s || "").toString().replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  function pretty(spec) {
+    if (!spec) return "未设置";
+    return spec.split("+").map(function (p) {
+      var m = { ctrl: "Ctrl", alt: "Alt", shift: "Shift", win: "Win" };
+      return m[p] || p.toUpperCase();
+    }).join(" + ");
+  }
+  function flash(text, ok) {
+    var b = document.getElementById("bar");
+    b.textContent = text;
+    b.className = "bar " + (ok ? "ok" : "err");
+    clearTimeout(window._flashT);
+    window._flashT = setTimeout(function () { b.className = "bar"; }, 6000);
+  }
+
+  function renderKeys() {
+    var box = document.getElementById("keys");
+    var html = "";
+    Object.keys(KEY_LABELS).map(function (a) { return a; }).forEach(function (action) {
+      var info = data.hotkeys[action] || {};
+      var spec = info.spec || "";
+      var dot = info.ok === true ? "ok" : (info.ok === false ? "bad" : "none");
+      html += '<div class="row">' +
+        '<div class="lbl">' + KEY_LABELS[action][0] + '<span class="sub">' + KEY_LABELS[action][1] + '</span></div>' +
+        '<div class="grow"></div>' +
+        '<button class="key" id="key-' + action + '" onclick="startListen(\'' + action + '\')">' + pretty(spec) + '</button>' +
+        '<span class="dot ' + dot + '" id="dot-' + action + '" title="' + (dot === "ok" ? "注册正常" : dot === "bad" ? "被占用" : "未知") + '"></span>' +
+        '</div>';
+    });
+    box.innerHTML = html;
+  }
+
+  function startListen(action) {
+    if (listening) {
+      var old = document.getElementById("key-" + listening);
+      if (old) old.classList.remove("listen");
+    }
+    listening = action;
+    var el = document.getElementById("key-" + action);
+    el.classList.add("listen");
+    el.textContent = "请按新组合键…";
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (!listening) {
+      if (e.key === "Escape") closeMe();
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Escape") {
+      var el = document.getElementById("key-" + listening);
+      if (el) { el.classList.remove("listen"); el.textContent = pretty(data.hotkeys[listening].spec); }
+      listening = null;
+      return;
+    }
+    var k = e.key;
+    if (["Control", "Alt", "Shift", "Meta"].indexOf(k) >= 0) return;
+    var mods = [];
+    if (e.ctrlKey) mods.push("ctrl");
+    if (e.altKey) mods.push("alt");
+    if (e.shiftKey) mods.push("shift");
+    if (e.metaKey) mods.push("win");
+    if (!mods.length) { flash("快捷键至少要带 Ctrl / Alt / Win 之一", false); return; }
+    var name = k.length === 1 ? k.toLowerCase() : k.toLowerCase();
+    var spec = mods.join("+") + "+" + name;
+    data.hotkeys[listening].spec = spec;
+    data.hotkeys[listening].ok = null;
+    var el2 = document.getElementById("key-" + listening);
+    if (el2) { el2.classList.remove("listen"); el2.textContent = pretty(spec); }
+    var dot = document.getElementById("dot-" + listening);
+    if (dot) dot.className = "dot none";
+    listening = null;
+  }, true);
+
+  function resetKeys() {
+    Object.keys(DEFAULT_KEYS).forEach(function (a) {
+      if (!data.hotkeys[a]) data.hotkeys[a] = {};
+      data.hotkeys[a].spec = DEFAULT_KEYS[a];
+      data.hotkeys[a].ok = null;
+    });
+    renderKeys();
+    flash("已恢复默认键位，记得点「保存并应用」", true);
+  }
+
+  function renderDicts() {
+    var box = document.getElementById("dicts");
+    if (!data.dictionaries.length) {
+      box.innerHTML = '<div class="dim">还没有词典，点下面「添加词典文件」选 .mdx</div>';
+    } else {
+      var html = "";
+      data.dictionaries.forEach(function (d, i) {
+        html += '<div class="dict">' +
+          '<div class="dn" title="' + esc(d.path) + '">' + esc(d.name) + '</div>' +
+          '<div class="dm">' + (d.count ? Number(d.count).toLocaleString() + " 条" : "待加载") +
+            ' · ' + esc(d.path.split("\\").slice(-1)[0]) + '</div>' +
+          '<div class="ops">' +
+            '<button class="btn" onclick="moveDict(' + i + ',-1)" ' + (i === 0 ? "disabled" : "") + '>↑</button>' +
+            '<button class="btn" onclick="moveDict(' + i + ',1)" ' + (i === data.dictionaries.length - 1 ? "disabled" : "") + '>↓</button>' +
+            '<button class="btn" onclick="delDict(' + i + ')">删除</button>' +
+          '</div></div>';
+      });
+      box.innerHTML = html;
+    }
+    var total = data.dictionaries.reduce(function (s, d) { return s + (d.count || 0); }, 0);
+    document.getElementById("dictHint").textContent =
+      data.dictionaries.length + " 本" + (total ? " · 共 " + total.toLocaleString() + " 条" : "");
+  }
+
+  function moveDict(i, delta) {
+    var j = i + delta;
+    if (j < 0 || j >= data.dictionaries.length) return;
+    var t = data.dictionaries[i];
+    data.dictionaries[i] = data.dictionaries[j];
+    data.dictionaries[j] = t;
+    renderDicts();
+  }
+  function delDict(i) {
+    var d = data.dictionaries[i];
+    if (!d) return;
+    data.dictionaries.splice(i, 1);
+    renderDicts();
+    flash("已移除「" + d.name + "」，点「保存并应用」生效", true);
+  }
+  function addDict() {
+    window.pywebview.api.pick_dictionary().then(function (res) {
+      if (!res) return;
+      if (res.error) { flash(res.error, false); return; }
+      var exists = data.dictionaries.some(function (d) { return d.path === res.path; });
+      if (exists) { flash("这本词典已经在列表里了", false); return; }
+      data.dictionaries.push(res);
+      renderDicts();
+      flash("已添加「" + res.name + "」，点「保存并应用」后开始加载", true);
+    });
+  }
+
+  function setAccent(a) {
+    data.accent = a;
+    document.querySelectorAll("#accentSeg button").forEach(function (b) {
+      b.classList.toggle("on", b.dataset.accent === a);
+    });
+  }
+  document.addEventListener("click", function (e) {
+    if (e.target.closest && e.target.closest("#accentSeg button")) {
+      setAccent(e.target.closest("#accentSeg button").dataset.accent);
+    }
+  });
+
+  window.renderSettings = function (d) {
+    data = d;
+    renderKeys();
+    renderDicts();
+    document.getElementById("autoCapture").checked = !!d.auto_capture;
+    document.getElementById("onlyEnglish").checked = !!d.capture_only_english;
+    document.getElementById("onlineTranslate").checked = d.online_translate !== false;
+    document.getElementById("autostart").checked = !!d.autostart;
+    document.getElementById("hideTray").checked = !!d.hide_tray_icon;
+    var delay = d.hover_delay_ms || 600;
+    document.getElementById("hoverDelay").value = delay;
+    document.getElementById("hoverVal").textContent = delay + " 毫秒";
+    setAccent(d.accent === "uk" ? "uk" : "us");
+    document.getElementById("state").textContent =
+      "配置目录：" + (d.config_path || "程序目录") + "　·　保存即生效";
+  };
+
+  document.getElementById("hoverDelay").addEventListener("input", function () {
+    document.getElementById("hoverVal").textContent = this.value + " 毫秒";
+  });
+
+  function saveAll() {
+    var btn = document.getElementById("saveBtn");
+    btn.disabled = true;
+    btn.textContent = "保存中…";
+    var payload = {
+      hotkeys: {},
+      dictionaries: data.dictionaries.map(function (d) {
+        return { path: d.path, name: d.name };
+      }),
+      auto_capture: document.getElementById("autoCapture").checked,
+      capture_only_english: document.getElementById("onlyEnglish").checked,
+      hover_delay_ms: parseInt(document.getElementById("hoverDelay").value, 10),
+      online_translate: document.getElementById("onlineTranslate").checked,
+      accent: data.accent,
+      autostart: document.getElementById("autostart").checked,
+      hide_tray_icon: document.getElementById("hideTray").checked
+    };
+    Object.keys(data.hotkeys).forEach(function (a) {
+      if (data.hotkeys[a] && data.hotkeys[a].spec) payload.hotkeys[a] = data.hotkeys[a].spec;
+    });
+    window.pywebview.api.save_settings(payload).then(function (res) {
+      btn.disabled = false;
+      btn.textContent = "保存并应用";
+      if (!res || res.ok === false) {
+        flash((res && res.error) || "保存失败", false);
+        return;
+      }
+      flash(res.message || "已保存", true);
+      document.getElementById("state").textContent = res.detail || "";
+      if (res.hotkeys) { data.hotkeys = res.hotkeys; renderKeys(); }
+      if (res.dictionaries) { data.dictionaries = res.dictionaries; renderDicts(); }
+    });
+  }
+
+  function closeMe() { window.pywebview.api.close_window("settings"); }
+
+  window.addEventListener("pywebviewready", function () {
+    window.pywebview.api.get_settings().then(function (d) { if (d) window.renderSettings(d); });
+  });
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.get_settings().then(function (d) { if (d) window.renderSettings(d); });
+  }
+</script>
+</body>
+</html>

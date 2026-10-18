@@ -55,6 +55,16 @@ WINDOW_TITLES = {
     "lookup": "暖词 · 快捷查词",
     "translate": "暖词 · 翻译选中内容",
     "vocab": "暖词 · 生词本",
+    "settings": "暖词 · 设置",
+}
+
+HOTKEY_LABELS = {
+    "lookup": "快捷查词",
+    "translate": "翻译选中内容",
+    "capture": "立即取词",
+    "toggle_auto": "自动取词开关",
+    "add_vocab": "收藏生词",
+    "quit": "退出程序",
 }
 VOCAB_PATH = BASE / "生词本.json"
 
@@ -369,6 +379,7 @@ VK_MAP.update({"space": 0x20, "tab": 0x09, "esc": 0x1B, "escape": 0x1B})
 MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN = 0x0001, 0x0002, 0x0004, 0x0008
 MOD_NOREPEAT = 0x4000
 WM_HOTKEY = 0x0312
+WM_APP_RELOAD_HOTKEYS = 0x8001
 
 
 def parse_hotkey(spec: str):
@@ -740,6 +751,55 @@ def show_vocab() -> None:
         log(f"[生词本] 显示失败: {e!r}")
 
 
+def settings_payload() -> dict:
+    """设置窗口要显示的全部状态。"""
+    counts = {}
+    if ENGINE is not None:
+        for b in ENGINE.books:
+            counts[str(b.path)] = len(b)
+    dicts = []
+    for d in CONFIG.get("dictionaries", []):
+        path = str(d.get("path", ""))
+        dicts.append({
+            "path": path,
+            "name": d.get("name") or Path(path).stem,
+            "count": counts.get(path, 0),
+            "ok": bool(counts.get(path)) or Path(path).exists(),
+        })
+    hotkeys = {}
+    for action, spec in CONFIG.get("hotkeys", {}).items():
+        hotkeys[action] = {"spec": spec, "ok": STATE.hotkey_status.get(action)}
+    return {
+        "hotkeys": hotkeys,
+        "dictionaries": dicts,
+        "auto_capture": bool(CONFIG.get("auto_capture", True)),
+        "capture_only_english": bool(CONFIG.get("capture_only_english", True)),
+        "hover_delay_ms": int(CONFIG.get("hover_delay_ms", 600)),
+        "online_translate": bool(CONFIG.get("online_translate", True)),
+        "accent": CONFIG.get("accent", "us"),
+        "autostart": autostart_enabled(),
+        "hide_tray_icon": bool(CONFIG.get("hide_tray_icon", False)),
+        "config_path": str(CONFIG_PATH),
+        "engine_ready": ENGINE is not None,
+    }
+
+
+def show_settings() -> None:
+    win = WINDOWS.get("settings")
+    if win is None:
+        return
+    push("settings", "renderSettings", settings_payload())
+    try:
+        x, y = center_window(win, 0.08)
+        win.show()
+        position_window("settings", x, y, show=True)
+        force_redraw("settings")
+        round_window("settings")
+        log("[设置] 窗口已打开")
+    except Exception as e:
+        log(f"[设置] 显示失败: {e!r}")
+
+
 def show_translate(text: str) -> None:
     win = WINDOWS.get("translate")
     if win is None:
@@ -831,6 +891,101 @@ class JsApi:
             win.resize(440, h)
         except Exception:
             pass
+
+    def pick_dictionary(self):
+        """打开文件对话框选一本 .mdx 词典。"""
+        win = WINDOWS.get("settings")
+        if win is None:
+            return {"error": "设置窗口还没准备好"}
+        try:
+            import webview as _wv
+            files = win.create_file_dialog(
+                _wv.OPEN_DIALOG, allow_multiple=False,
+                file_types=("MDict 词典 (*.mdx)", "所有文件 (*.*)"))
+            if not files:
+                return None
+            path = files[0] if isinstance(files, (list, tuple)) else files
+            p = Path(path)
+            if p.suffix.lower() != ".mdx":
+                return {"error": "请选择 .mdx 格式的词典文件"}
+            return {"path": str(p), "name": p.stem, "count": 0, "ok": False}
+        except Exception as e:
+            log(f"[设置] 选词典失败 {e!r}")
+            return {"error": f"选择文件失败：{e}"}
+
+    def get_settings(self) -> dict:
+        return settings_payload()
+
+    def save_settings(self, payload: dict) -> dict:
+        payload = payload or {}
+        # 1. 快捷键先校验，不合法就整体不写
+        incoming = payload.get("hotkeys") or {}
+        for action, spec in incoming.items():
+            if action not in HOTKEY_LABELS:
+                continue
+            try:
+                mods, vk = parse_hotkey(spec or "")
+            except Exception:
+                mods, vk = 0, None
+            # parse_hotkey 会带上 MOD_NOREPEAT，这里只看真正的修饰键
+            if not vk or not (mods & (MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_WIN)):
+                return {"ok": False,
+                        "error": f"「{HOTKEY_LABELS.get(action, action)}」的快捷键不合法：至少要 Ctrl / Alt / Win 之一加一个按键"}
+        # 2. 词典校验
+        new_dicts = payload.get("dictionaries")
+        if new_dicts is not None:
+            cleaned, seen = [], set()
+            for d in new_dicts:
+                path = str((d or {}).get("path", "")).strip()
+                if not path or path in seen:
+                    continue
+                seen.add(path)
+                if not Path(path).exists():
+                    return {"ok": False, "error": f"找不到词典文件：{path}"}
+                cleaned.append({"path": path,
+                                "name": (d or {}).get("name") or Path(path).stem})
+            if not cleaned:
+                return {"ok": False, "error": "至少要保留一本词典"}
+            new_dicts = cleaned
+
+        old_hotkeys = dict(CONFIG.get("hotkeys", {}))
+        old_dicts = [dict(d) for d in CONFIG.get("dictionaries", [])]
+
+        if incoming:
+            CONFIG.setdefault("hotkeys", {}).update(
+                {k: v for k, v in incoming.items() if k in HOTKEY_LABELS})
+        if new_dicts is not None:
+            CONFIG["dictionaries"] = new_dicts
+        for key in ("auto_capture", "capture_only_english", "online_translate", "hide_tray_icon"):
+            if key in payload:
+                CONFIG[key] = bool(payload[key])
+        if "hover_delay_ms" in payload:
+            try:
+                CONFIG["hover_delay_ms"] = max(300, min(2000, int(payload["hover_delay_ms"])))
+            except Exception:
+                pass
+        if payload.get("accent") in ("us", "uk"):
+            CONFIG["accent"] = payload["accent"]
+        save_config()
+
+        STATE.auto_capture = bool(CONFIG.get("auto_capture", True))
+        if payload.get("autostart") is not None:
+            set_autostart(bool(payload["autostart"]))
+
+        notes = []
+        if CONFIG.get("hotkeys", {}) != old_hotkeys:
+            reload_hotkeys_async()
+            notes.append("快捷键已换")
+        if CONFIG.get("dictionaries", []) != old_dicts:
+            threading.Thread(target=reload_engine, daemon=True).start()
+            notes.append("词典在后台重新加载（约几秒）")
+        if CONFIG.get("hide_tray_icon"):
+            notes.append("隐藏托盘图标要重启程序才生效")
+        msg = "已保存：" + ("；".join(notes) if notes else "设置已更新")
+        log(f"[设置] {msg}")
+        fresh = settings_payload()
+        return {"ok": True, "message": msg, "detail": f"已写入 {CONFIG_PATH}",
+                "hotkeys": fresh["hotkeys"], "dictionaries": fresh["dictionaries"]}
 
     def close_window(self, which: str) -> None:
         win = WINDOWS.get(which)
@@ -1013,14 +1168,25 @@ API = JsApi()
 def hotkey_thread():
     try:
         STATE.hotkey_tid = kernel32.GetCurrentThreadId()
-        reg = {}
-        for idx, (action, spec) in enumerate(CONFIG["hotkeys"].items(), start=1):
-            mods, vk = parse_hotkey(spec)
-            ok = user32.RegisterHotKey(None, idx, mods, vk)
-            STATE.hotkey_status[spec] = bool(ok)
-            log(f"[热键] {spec} -> {action} {'注册成功' if ok else '注册失败（可能被其他软件占用）'}")
-            if ok:
-                reg[idx] = action
+        reg: dict[int, str] = {}
+
+        def register_all() -> None:
+            for idx in list(reg.keys()):
+                user32.UnregisterHotKey(None, idx)
+            reg.clear()
+            STATE.hotkey_status = {}
+            for idx, (action, spec) in enumerate(CONFIG["hotkeys"].items(), start=1):
+                if not spec:
+                    continue
+                mods, vk = parse_hotkey(spec)
+                ok = user32.RegisterHotKey(None, idx, mods, vk)
+                STATE.hotkey_status[action] = bool(ok)
+                log(f"[热键] {HOTKEY_LABELS.get(action, action)} {spec} -> "
+                    f"{'注册成功' if ok else '注册失败（可能被其他软件占用）'}")
+                if ok:
+                    reg[idx] = action
+
+        register_all()
         MSG = ctypes.wintypes.MSG()
         while not STATE.quit:
             r = user32.GetMessageW(ctypes.byref(MSG), None, 0, 0)
@@ -1028,8 +1194,33 @@ def hotkey_thread():
                 break
             if MSG.message == WM_HOTKEY and MSG.wParam in reg:
                 on_hotkey(reg[MSG.wParam])
+            elif MSG.message == WM_APP_RELOAD_HOTKEYS:
+                log("[热键] 配置有变，重新注册")
+                register_all()
     except Exception as e:
         log(f"[热键线程异常] {e!r}")
+
+
+def reload_hotkeys_async() -> None:
+    """通知热键线程按新配置重新注册。"""
+    try:
+        if STATE.hotkey_tid:
+            user32.PostThreadMessageW(STATE.hotkey_tid, WM_APP_RELOAD_HOTKEYS, 0, 0)
+    except Exception as e:
+        log(f"[热键] 重载通知失败 {e!r}")
+
+
+def reload_engine() -> None:
+    """按当前配置重新加载词典（设置里换过词典后调用）。"""
+    global ENGINE
+    try:
+        books = [(d["path"], d.get("name")) for d in CONFIG["dictionaries"]]
+        log(f"[词典] 重新加载 {len(books)} 本…")
+        ENGINE = DictEngine(books)
+        names = "、".join(f"{b.name}（{len(b):,} 条）" for b in ENGINE.books)
+        log(f"[词典] 重新加载完成: {names}")
+    except Exception as e:
+        log(f"[词典] 重新加载失败 {e!r}")
 
 
 def on_hotkey(action: str):
@@ -1187,7 +1378,7 @@ def make_tool_window(name: str) -> bool:
 def init_windows():
     """窗口初始化：先隐藏状态下挂好「不进任务栏」的样式，再显示到屏幕外待命。"""
     FLOAT_HWND["hwnd"] = 0
-    names = ("float", "lookup", "translate", "vocab")
+    names = ("float", "lookup", "translate", "vocab", "settings")
     for name in names:
         if WINDOWS.get(name) is None:
             continue
@@ -1295,8 +1486,10 @@ def self_check() -> str:
         lines.append(f"查询测试: test -> {len(hit)} 条，{(time.time()-t0)*1000:.0f} 毫秒")
     lines.append("")
     if STATE.hotkey_status:
-        for spec, ok in STATE.hotkey_status.items():
-            lines.append(f"热键 {spec}: {'正常' if ok else '注册失败（被占用）'}")
+        for action, ok in STATE.hotkey_status.items():
+            spec = CONFIG.get("hotkeys", {}).get(action, "")
+            lines.append(f"热键 {HOTKEY_LABELS.get(action, action)}（{spec}）: "
+                         f"{'正常' if ok else '注册失败（被占用）'}")
     else:
         lines.append("热键: 还没注册")
     lines.append("")
@@ -1358,6 +1551,17 @@ def trigger_file_thread():
             API.close_window("float")
         elif action == "vocab":
             show_vocab()
+        elif action == "settings":
+            show_settings()
+        elif action == "js" and rest:
+            # 调试用：js <窗口名>\n<JS 代码>
+            target, _, code = rest.partition("\n")
+            win = WINDOWS.get(target.strip() or "float")
+            if win is not None and code.strip():
+                try:
+                    win.evaluate_js(code)
+                except Exception as e:
+                    log(f"[调试] 执行 JS 失败 {e!r}")
         elif action == "addvocab":
             if rest:
                 add_vocab(rest)
@@ -1409,6 +1613,9 @@ def tray_thread():
     if CONFIG.get("hide_tray_icon"):
         log("[托盘] 配置为隐藏托盘图标；退出请按 Ctrl+Alt+Q")
         return
+
+    def on_settings(icon, item):
+        show_settings()
 
     def on_lookup(icon, item):
         show_lookup()
@@ -1467,6 +1674,8 @@ def tray_thread():
         os._exit(0)
 
     menu = pystray.Menu(
+        Item("设置（快捷键 / 词典 / 取词）", on_settings),
+        pystray.Menu.SEPARATOR,
         Item("快捷查词 (Ctrl+Alt+D)", on_lookup, default=True),
         Item("翻译选中内容 (Ctrl+Alt+T)", on_translate),
         Item("鼠标处取词 (Ctrl+Alt+A)", on_capture),
@@ -1548,6 +1757,7 @@ def main():
     translate_html = (BASE / "ui" / "translate.html").read_text(encoding="utf-8")
 
     vocab_html = (BASE / "ui" / "vocab.html").read_text(encoding="utf-8")
+    settings_html = (BASE / "ui" / "settings.html").read_text(encoding="utf-8")
 
     WINDOWS["float"] = webview.create_window(
         WINDOW_TITLES["float"], html=float_html, js_api=API,
@@ -1562,6 +1772,9 @@ def main():
     WINDOWS["vocab"] = webview.create_window(
         WINDOW_TITLES["vocab"], html=vocab_html, js_api=API,
         width=760, height=780, on_top=True, hidden=True)
+    WINDOWS["settings"] = webview.create_window(
+        WINDOW_TITLES["settings"], html=settings_html, js_api=API,
+        width=780, height=820, on_top=True, hidden=True)
 
     threading.Timer(1.0, init_windows).start()
     # 窗口每次显示时再兜底一次，避免任务栏出现图标
