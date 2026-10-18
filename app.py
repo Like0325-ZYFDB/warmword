@@ -86,6 +86,37 @@ def single_instance() -> bool:
     return kernel32.GetLastError() != 183  # ERROR_ALREADY_EXISTS
 
 
+QUIT_EVENT = "WarmWordHelper_QuitEvent_v1"
+
+
+def ask_old_instance_quit() -> bool:
+    """通知正在跑的旧实例退出（用于托盘「重启程序」）。"""
+    try:
+        kernel32.OpenEventW.restype = ctypes.c_void_p
+        h = kernel32.OpenEventW(0x0002, False, QUIT_EVENT)  # EVENT_MODIFY_STATE
+        if not h:
+            return False
+        kernel32.SetEvent(ctypes.c_void_p(h))
+        kernel32.CloseHandle(ctypes.c_void_p(h))
+        return True
+    except Exception:
+        return False
+
+
+def quit_watcher() -> None:
+    """旧实例监听退出信号：收到就自己退出，让新实例接管。"""
+    try:
+        kernel32.CreateEventW.restype = ctypes.c_void_p
+        h = kernel32.CreateEventW(None, False, False, QUIT_EVENT)
+        while not STATE.quit:
+            r = kernel32.WaitForSingleObject(ctypes.c_void_p(h), 1000)
+            if r == 0:
+                log("[重启] 收到重启通知，旧实例退出")
+                os._exit(0)
+    except Exception as e:
+        log(f"[重启] 监听失败 {e!r}")
+
+
 # ---------------- 配置 ----------------
 DEFAULT_CONFIG = {
     "dictionaries": [
@@ -1077,9 +1108,54 @@ def detach_from_taskbar(name: str) -> bool:
         # 关键：清掉「应用窗口」标志（WinForms 默认会加，它优先于工具窗口，导致任务栏照显示）
         ex = (ex | 0x00000080 | 0x08000000) & ~0x00040000
         user32.SetWindowLongPtrW(hwnd, -20, ctypes.c_void_p(ex))
+        delete_taskbar_tab(hwnd)
         return True
     except Exception as e:
         log(f"[任务栏] {name} 脱钩失败 {e!r}")
+        return False
+
+
+def delete_taskbar_tab(hwnd: int) -> bool:
+    """调用系统官方接口 ITaskbarList::DeleteTab，把窗口按钮从任务栏强制删除。"""
+    try:
+        import uuid
+        ole32 = ctypes.windll.ole32
+
+        class GUID(ctypes.Structure):
+            _fields_ = [("Data1", ctypes.c_ulong), ("Data2", ctypes.c_ushort),
+                        ("Data3", ctypes.c_ushort), ("Data4", ctypes.c_ubyte * 8)]
+
+        def mk_guid(s):
+            u = uuid.UUID(s)
+            g = GUID()
+            g.Data1, g.Data2, g.Data3 = u.time_low, u.time_mid, u.time_hi_version
+            for i, b in enumerate(u.bytes[8:]):
+                g.Data4[i] = b
+            return g
+
+        ole32.CoInitializeEx(None, 0x2)  # 已初始化也无害
+        clsid = mk_guid("{56FDF344-FD6D-11d0-958A-006097C9A090}")
+        iid = mk_guid("{56FDF342-FD6D-11d0-958A-006097C9A090}")
+        ptr = ctypes.c_void_p()
+        hr = ole32.CoCreateInstance(ctypes.byref(clsid), None, 1,
+                                    ctypes.byref(iid), ctypes.byref(ptr))
+        if hr != 0 or not ptr.value:
+            log(f"[任务栏] 取任务栏接口失败 hr=0x{hr & 0xFFFFFFFF:X}")
+            return False
+        vtbl = ctypes.cast(ptr, ctypes.POINTER(ctypes.c_void_p))[0]
+        slot = ctypes.sizeof(ctypes.c_void_p)
+
+        def method(i):
+            return ctypes.cast(vtbl + i * slot, ctypes.POINTER(ctypes.c_void_p))[0]
+
+        HRESULT = ctypes.c_long
+        ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p)(method(3))(ptr)          # HrInit
+        ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p,
+                           ctypes.c_void_p)(method(5))(ptr, ctypes.c_void_p(hwnd))  # DeleteTab
+        ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(method(2))(ptr)   # Release
+        return True
+    except Exception as e:
+        log(f"[任务栏] DeleteTab 异常 {e!r}")
         return False
 
 
@@ -1357,6 +1433,18 @@ def tray_thread():
         except Exception:
             pass
 
+    def on_restart(icon, item):
+        """真正重启：新进程带 --force 跳过单实例检查，然后自己退出。"""
+        import subprocess
+        log("[重启] 托盘请求重启程序")
+        try:
+            subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--force"],
+                             cwd=str(BASE), creationflags=0x00000008)
+        except Exception as e:
+            log(f"[重启] 拉起新进程失败 {e!r}")
+        time.sleep(0.8)
+        os._exit(0)
+
     def on_toggle(icon, item):
         toggle_auto()
 
@@ -1389,6 +1477,7 @@ def tray_thread():
         Item("开机自启", on_autostart, checked=lambda item: autostart_enabled()),
         pystray.Menu.SEPARATOR,
         Item("自检（生成报告）", on_selfcheck),
+        Item("重启程序（改配置/更新后用）", on_restart),
         Item("隐藏托盘图标（退出用 Ctrl+Alt+Q）", on_hide_tray),
         Item("退出", on_quit),
     )
@@ -1428,7 +1517,12 @@ def main():
     CONFIG = load_config()
     STATE.auto_capture = bool(CONFIG.get("auto_capture", True))
 
-    if not single_instance():
+    force = "--force" in sys.argv or "--restart" in sys.argv
+    if force:
+        if ask_old_instance_quit():
+            log("[重启] 已通知旧实例退出，等它让路")
+            time.sleep(2.5)
+    elif not single_instance():
         log("[启动] 已有实例在跑，唤出查词窗后退出")
         try:
             (BASE / "触发.txt").write_text("lookup", encoding="utf-8")
@@ -1444,6 +1538,7 @@ def main():
     threading.Thread(target=hover_thread, daemon=True).start()
     threading.Thread(target=trigger_file_thread, daemon=True).start()
     threading.Thread(target=tray_thread, daemon=True).start()
+    threading.Thread(target=quit_watcher, daemon=True).start()
 
     ensure_autostart()
     CAPTURE = CaptureClient()  # 取词交给独立小进程（文字接口只能在进程主线程用）
