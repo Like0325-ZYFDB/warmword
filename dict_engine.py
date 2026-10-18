@@ -309,11 +309,12 @@ if __name__ == "__main__":
     import sys
 
     sys.stdout.reconfigure(encoding="utf-8")
-    d = r"C:\Users\lk\AppData\Roaming\Francochinois\eudic"
+    # 示例：把 d 换成你自己的词典所在目录
+    d = r"C:\词典"
     engine = DictEngine([
         (d + r"\oaldZhEn.mdx", "牛津汉英"),
         (d + r"\oaldpe.mdx", "牛津高阶"),
-        (d + r"\麦克米伦高阶英汉双解词典(1).mdx", "麦克米伦英汉双解"),
+        (d + r"\麦克米伦高阶英汉双解.mdx", "麦克米伦英汉双解"),
     ])
     for book in engine.books:
         print(f"已加载 {book.name}: {len(book)} 条，耗时 {book.load_seconds:.1f}s")

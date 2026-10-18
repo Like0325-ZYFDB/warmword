@@ -90,15 +90,15 @@ def single_instance() -> bool:
 DEFAULT_CONFIG = {
     "dictionaries": [
         {
-            "path": r"C:\Users\lk\AppData\Roaming\Francochinois\eudic\oaldpe.mdx",
+            "path": r"C:\词典\oaldpe.mdx",
             "name": "牛津高阶",
         },
         {
-            "path": r"C:\Users\lk\AppData\Roaming\Francochinois\eudic\麦克米伦高阶英汉双解词典(1).mdx",
+            "path": r"C:\词典\麦克米伦高阶英汉双解.mdx",
             "name": "麦克米伦英汉双解",
         },
         {
-            "path": r"C:\Users\lk\AppData\Roaming\Francochinois\eudic\oaldZhEn.mdx",
+            "path": r"C:\词典\oaldZhEn.mdx",
             "name": "牛津汉英",
         },
     ],
