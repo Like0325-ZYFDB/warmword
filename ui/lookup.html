@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: linear-gradient(165deg, #faf6ee 0%, #f5eddd 100%);
+    font-family: "Microsoft YaHei", sans-serif;
+    color: #3d3229;
+  }
+  .wrap { padding: 14px 16px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+  .title {
+    font-family: "KaiTi", "STKaiti", serif; font-size: 18px; color: #7a5c3e;
+    letter-spacing: 2px; margin-bottom: 9px; flex: none;
+  }
+  .title .deco { color: #c2a06a; font-size: 14px; margin: 0 5px; }
+  .search-box { position: relative; flex: none; }
+  #q {
+    width: 100%; box-sizing: border-box;
+    border: 1px solid #d9c8a6; border-radius: 12px;
+    background: #fffdf7; padding: 10px 13px; font-size: 15px;
+    color: #3d3229; outline: none;
+  }
+  #q:focus { border-color: #b06a3f; }
+  .suggest {
+    position: absolute; z-index: 9; left: 0; right: 0; top: 43px;
+    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 10px;
+    box-shadow: 0 8px 20px rgba(110, 88, 56, .16); overflow: hidden;
+        max-height: 240px; overflow-y: auto;
+  }
+  .suggest div { padding: 7px 13px; font-size: 13px; cursor: pointer; color: #5a4a36; }
+  .suggest div:hover { background: #f3e8d2; }
+  .body {
+    margin-top: 10px; flex: 1; overflow-y: auto;
+    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 14px;
+    padding: 11px 14px;
+  }
+  .body::-webkit-scrollbar { width: 7px; }
+  .body::-webkit-scrollbar-thumb { background: #d8cbb2; border-radius: 4px; }
+  .entry { padding: 8px 2px; border-bottom: 1px dashed #d8cbb2; }
+  .entry:last-child { border-bottom: none; }
+  .dict-name {
+    display: inline-block; font-size: 11px; color: #fff; background: #a9895f;
+    border-radius: 8px; padding: 1px 9px; margin-bottom: 5px;
+    font-family: "KaiTi", serif; letter-spacing: 1px;
+  }
+  .def-body { font-size: 14.5px; line-height: 1.9; color: #3f342a; word-break: break-word; }
+  .def-body b, .def-body strong { color: #b06a3f; font-weight: 600; }
+  .def-body i, .def-body em { color: #8a7a66; }
+  .def-body .cn { color: #8a5a2b; }
+  .def-body .phon { color: #9c8b72; font-style: italic; font-size: .94em; letter-spacing: .3px; }
+  .def-body .pos {
+    display: inline-block; background: #b06a3f; color: #fff;
+    border-radius: 8px; padding: 0 8px; font-size: 12px; line-height: 1.6; margin-right: 4px;
+  }
+  .def-body .num {
+    display: inline-block; background: #f0e4cf; color: #8a5a2b;
+    border-radius: 7px; padding: 0 7px; font-size: 12.5px; font-weight: 600;
+  }
+  .word-head {
+    font-family: "KaiTi", serif; font-size: 24px; color: #6b4a2b;
+    margin: 0 0 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .word-head .btn { font-family: "Microsoft YaHei", sans-serif; }
+  .empty { color: #a08c6e; text-align: center; padding: 40px 10px; font-size: 13px; }
+  .btn {
+    border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45;
+    border-radius: 9px; padding: 3px 10px; font-size: 12px; cursor: pointer;
+  }
+  .btn:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
+  .hint {
+    flex: none; margin-top: 7px; font-size: 11px; color: #a08c6e;
+    font-family: "KaiTi", serif; letter-spacing: .5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title"><span class="deco">✿</span>暖词 · 快捷查词<span class="deco">✎</span></div>
+  <div class="search-box">
+    <input id="q" placeholder="输入单词或中文，回车查词…" autocomplete="off" spellcheck="false">
+    <div class="suggest" id="suggest" style="display:none"></div>
+  </div>
+  <div class="body" id="body">
+    <div class="empty">输入单词开始查词<br><br>—— 词典在手，慢慢探索 ——</div>
+  </div>
+  <div class="hint">Esc 关闭　·　Ctrl+Alt+T 翻译选中　·　Ctrl+Alt+A 取词　·　变形自动回溯</div>
+</div>
+<script>
+  var timer = null, currentWord = "";
+  var q = document.getElementById("q");
+  var suggestBox = document.getElementById("suggest");
+
+  q.addEventListener("input", function () {
+    clearTimeout(timer);
+    timer = setTimeout(doSearch, 220);
+  });
+  q.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { clearTimeout(timer); doSearch(); }
+    if (e.key === "Escape") { window.pywebview.api.close_window("lookup"); }
+  });
+
+  function esc(s) {
+    return (s || "").replace(/[&<>]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
+    });
+  }
+
+  function doSearch() {
+    var w = q.value.trim();
+    if (!w) { suggestBox.style.display = "none"; return; }
+    window.pywebview.api.search(w).then(function (data) { renderLookup(data); });
+    window.pywebview.api.suggest(w).then(function (words) {
+      if (!words || !words.length) { suggestBox.style.display = "none"; return; }
+      var html = "";
+      words.forEach(function (x) {
+        html += '<div onclick="pickSuggest(\'' + esc(x).replace(/'/g, "\\'") + '\')">' + esc(x) + '</div>';
+      });
+      suggestBox.innerHTML = html;
+      suggestBox.style.display = "block";
+    });
+  }
+
+  function pickSuggest(w) {
+    q.value = w;
+    suggestBox.style.display = "none";
+    clearTimeout(timer);
+    doSearch();
+  }
+
+  window.renderLookup = function (data) {
+    currentWord = data.word || "";
+    var body = document.getElementById("body");
+    suggestBox.style.display = "none";
+    if (!data.entries || !data.entries.length) {
+      body.innerHTML = '<div class="empty">「' + esc(data.word) + '」没有找到释义<br><br>换个词试试？</div>';
+      return;
+    }
+    var html = '<div class="word-head">' + esc(data.word) +
+      '<button class="btn" onclick="speak(\'uk\')">英</button>' +
+      '<button class="btn" onclick="speak(\'us\')">美</button>' +
+      '<button class="btn" id="vbtn" onclick="addVocabWord()">收藏</button></div>';
+    data.entries.forEach(function (e) {
+      html += '<div class="entry"><div class="dict-name">' + esc(e.dict) + '</div>' +
+              '<div class="def-body">' + e.html + '</div></div>';
+    });
+    body.innerHTML = html;
+    document.body.scrollTop = 0;
+  };
+
+  function speak(accent) {
+    if (currentWord) window.pywebview.api.speak(currentWord, accent);
+  }
+
+  function addVocabWord() {
+    if (!currentWord) return;
+    window.pywebview.api.add_vocab(currentWord).then(function (ok) {
+      var b = document.getElementById("vbtn");
+      if (!b) return;
+      b.textContent = ok ? "已收藏" : "已存在";
+      b.style.background = ok ? "#6a8f6b" : "#c9b79a";
+      b.style.color = "#fff";
+      setTimeout(function () { b.textContent = "收藏"; b.style.background = ""; b.style.color = ""; }, 1600);
+    });
+  }
+
+  window.focusSearch = function () { q.focus(); q.select(); };
+</script>
+</body>
+</html>

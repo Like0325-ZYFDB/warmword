@@ -1,0 +1,23 @@
+# 运行环境
+venv/
+venv313/
+python/
+__pycache__/
+*.py[cod]
+
+# 用户数据（不含在仓库里）
+config.json
+生词本.json
+logs/
+cache/
+导出/
+触发.txt
+测试_窗口内容.txt
+探测结果.txt
+自检报告.txt
+
+# 系统
+Thumbs.db
+desktop.ini
+.DS_Store
+*.zip

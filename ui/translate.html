@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: linear-gradient(165deg, #faf6ee 0%, #f5eddd 100%);
+    font-family: "Microsoft YaHei", sans-serif;
+    color: #3d3229;
+  }
+  .wrap { padding: 14px 16px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+  .title {
+    font-family: "KaiTi", "STKaiti", serif; font-size: 18px; color: #7a5c3e;
+    letter-spacing: 2px; margin-bottom: 9px; flex: none;
+    display: flex; align-items: center;
+  }
+  .title .deco { color: #c2a06a; font-size: 14px; margin: 0 5px; }
+  .title .btn { margin-left: auto; }
+  .panel {
+    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 14px;
+    padding: 11px 14px; flex: none;
+  }
+  .label {
+    font-family: "KaiTi", serif; font-size: 12px; color: #a08c6e;
+    letter-spacing: 2px; margin-bottom: 5px;
+  }
+  .orig { font-size: 13.5px; line-height: 1.75; color: #4a3d2f; }
+  .trans {
+    margin-top: 10px; font-size: 15px; line-height: 1.85; color: #6b4a2b;
+    border-top: 1px dashed #d8cbb2; padding-top: 9px;
+    font-family: "KaiTi", "STKaiti", serif;
+  }
+  .words { margin-top: 9px; flex: 1; overflow-y: auto; }
+  .words::-webkit-scrollbar { width: 7px; }
+  .words::-webkit-scrollbar-thumb { background: #d8cbb2; border-radius: 4px; }
+  .w-item {
+    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 12px;
+    margin-bottom: 7px; overflow: hidden;
+  }
+  .w-head { padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 9px; }
+  .w-head:hover { background: #f7efdf; }
+  .w-word { font-family: "KaiTi", serif; font-size: 16px; color: #6b4a2b; font-weight: 700; }
+  .w-brief { font-size: 12px; color: #8a7a66; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .w-body {
+    display: none; border-top: 1px dashed #d8cbb2; padding: 8px 12px;
+    font-size: 13.5px; line-height: 1.85; color: #3f342a; background: #fffcf4;
+  }
+  .w-body b, .w-body strong { color: #b06a3f; }
+  .w-body .cn { color: #8a5a2b; }
+  .w-body .phon { color: #9c8b72; font-style: italic; font-size: .94em; }
+  .btn {
+    border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45;
+    border-radius: 9px; padding: 3px 10px; font-size: 12px; cursor: pointer;
+  }
+  .btn:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
+  .empty { color: #a08c6e; text-align: center; padding: 26px 10px; font-size: 13px; }
+  .spin {
+    display: inline-block; width: 13px; height: 13px; margin-right: 7px;
+    border: 2px solid #e2d5bb; border-top-color: #b06a3f; border-radius: 50%;
+    animation: r 1s linear infinite; vertical-align: -2px;
+  }
+  @keyframes r { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title"><span class="deco">✿</span>暖词 · 翻译选中内容<span class="deco">✎</span>
+    <button class="btn" onclick="retranslate()">重新翻译</button></div>
+  <div class="panel">
+    <div class="label">原文</div>
+    <div class="orig" id="orig">—</div>
+    <div class="trans" id="trans">—</div>
+  </div>
+  <div class="label" style="margin:9px 2px 5px;">句中生词 · 点开看释义</div>
+  <div class="words" id="words"><div class="empty">—</div></div>
+  <div class="label" style="margin-top:6px;">Ctrl+Alt+T 翻译新内容 · Esc 关闭</div>
+</div>
+<script>
+  var currentText = "";
+  window.__words = [];
+
+  function esc(s) {
+    return (s || "").replace(/[&<>]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
+    });
+  }
+
+  window.renderTranslate = function (data) {
+    currentText = data.original || "";
+    window.__words = (data.words || []).map(function (w) { return w.word; });
+    document.getElementById("orig").textContent = data.original || "—";
+    document.getElementById("trans").innerHTML =
+      data.loading ? '<span class="spin"></span>翻译中…'
+        : esc(data.translated || "翻译不可用（联网翻译没连上），可看下方生词释义");
+
+    var words = data.words || [];
+    var box = document.getElementById("words");
+    if (!words.length) {
+      box.innerHTML = '<div class="empty">句子里没有需要查的生词</div>';
+      return;
+    }
+    var html = "";
+    words.forEach(function (item, i) {
+      html += '<div class="w-item">' +
+        '<div class="w-head" onclick="toggle(' + i + ')">' +
+          '<span class="w-word">' + esc(item.word) + '</span>' +
+          '<span class="w-brief">' + esc(item.brief) + '</span>' +
+        '</div>' +
+        '<div class="w-body" id="wb' + i + '">' + (item.html || "") + '</div>' +
+      '</div>';
+    });
+    box.innerHTML = html;
+  };
+
+  function toggle(i) {
+    var el = document.getElementById("wb" + i);
+    if (!el) return;
+    if (el.style.display === "block") { el.style.display = "none"; return; }
+    el.style.display = "block";
+    if (!el.dataset.loaded) {
+      el.dataset.loaded = "1";
+      el.innerHTML = '<span class="spin"></span>查询中…';
+      window.pywebview.api.word_detail(window.__words[i]).then(function (html) {
+        el.innerHTML = html || "没有找到释义";
+      });
+    }
+  }
+
+  function retranslate() {
+    if (!currentText) return;
+    document.getElementById("trans").innerHTML = '<span class="spin"></span>翻译中…';
+    window.pywebview.api.translate_text(currentText).then(function (t) {
+      document.getElementById("trans").innerHTML = esc(t || "翻译不可用");
+    });
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") window.pywebview.api.close_window("translate");
+  });
+</script>
+</body>
+</html>
