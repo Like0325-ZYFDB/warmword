@@ -103,6 +103,16 @@
   .seg button.on { background: #b06a3f; color: #fff; border-color: #b06a3f; }
   .foot { flex: none; display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid #eadfc7; }
   .foot .state { flex: 1; font-size: 11.5px; color: #a08c6e; }
+  .dict.missing { background: #fdf0ee; border-color: #ecc7c0; }
+  .dict.missing .dm { color: #b0463a; }
+  .txt {
+    font-family: "Consolas", monospace; font-size: 12px; width: 220px;
+    border: 1px solid #d9c8a6; background: #fffaf0; color: #5a4a36;
+    border-radius: 8px; padding: 4px 9px; outline: none;
+  }
+  .txt:focus { border-color: #b06a3f; }
+  .prog { height: 4px; border-radius: 3px; background: #eadfc7; margin-top: 6px; overflow: hidden; display: none; }
+  .prog i { display: block; height: 100%; width: 0; background: #b06a3f; transition: width .3s; }
 </style>
 </head>
 <body>
@@ -126,10 +136,12 @@
     <div class="card">
       <h3>词典 <span class="hint" id="dictHint"></span></h3>
       <div id="dicts"></div>
-      <div style="display:flex;gap:8px;margin-top:6px">
+      <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap">
         <button class="btn" onclick="addDict()">＋ 添加词典文件</button>
-        <span class="dim" id="dictNote">支持 .mdx 格式（欧陆、GoldenDict 用的是同一种）</span>
+        <button class="btn" id="ecdictBtn" onclick="downloadEcdict()" title="skywind3000/ECDICT，MIT 开源，77 万词条，带音标、考纲和词频">下载开源词库 ECDICT（约 63MB）</button>
+        <span class="dim" id="dictNote">支持 .mdx（欧路、GoldenDict 同款格式），以及 ECDICT 的 .csv / .db</span>
       </div>
+      <div class="prog" id="ecdictProg"><i></i></div>
     </div>
 
     <div class="card">
@@ -140,12 +152,22 @@
         <label class="sw"><input type="checkbox" id="autoCapture"><span></span></label>
       </div>
       <div class="row">
+        <div class="lbl">取词方式<span class="sub">按住某个键才取词，看文章时不会乱弹</span></div>
+        <div class="grow"></div>
+        <div class="seg" id="modSeg">
+          <button data-mod="">停住就取</button>
+          <button data-mod="ctrl">按住 Ctrl</button>
+          <button data-mod="shift">按住 Shift</button>
+          <button data-mod="alt">按住 Alt</button>
+        </div>
+      </div>
+      <div class="row">
         <div class="lbl">只取英文单词<span class="sub">中文不弹窗，走查词窗</span></div>
         <div class="grow"></div>
         <label class="sw"><input type="checkbox" id="onlyEnglish"><span></span></label>
       </div>
       <div class="row">
-        <div class="lbl">悬停触发延时<span class="sub">停多久才取词</span></div>
+        <div class="lbl">悬停触发延时<span class="sub">「停住就取」时停多久才取词</span></div>
         <div class="grow"></div>
         <input type="range" id="hoverDelay" min="300" max="1500" step="100">
         <span class="val" id="hoverVal">600 毫秒</span>
@@ -158,6 +180,16 @@
         <div class="lbl">联网整句翻译<span class="sub">关掉就只用本地词典</span></div>
         <div class="grow"></div>
         <label class="sw"><input type="checkbox" id="onlineTranslate"><span></span></label>
+      </div>
+      <div class="row">
+        <div class="lbl">百度翻译 APP ID<span class="sub">选填；国内网络推荐，填了优先用</span></div>
+        <div class="grow"></div>
+        <input class="txt" id="baiduAppid" placeholder="在 fanyi-api.baidu.com 免费申请" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <div class="lbl">百度翻译密钥<span class="sub">只保存在本机配置文件里</span></div>
+        <div class="grow"></div>
+        <input class="txt" id="baiduKey" type="password" autocomplete="off" spellcheck="false">
       </div>
       <div class="row">
         <div class="lbl">默认发音<span class="sub">浮窗发音按钮的默认口音</span></div>
@@ -177,15 +209,20 @@
         <label class="sw"><input type="checkbox" id="autostart"><span></span></label>
       </div>
       <div class="row">
-        <div class="lbl">隐藏托盘图标<span class="sub">之后用 Ctrl+Alt+Q 退出</span></div>
+        <div class="lbl">隐藏托盘图标<span class="sub">之后用 <span data-hk-spec="quit">Ctrl+Alt+Q</span> 退出</span></div>
         <div class="grow"></div>
         <label class="sw"><input type="checkbox" id="hideTray"><span></span></label>
+      </div>
+      <div class="row">
+        <div class="lbl">数据目录<span class="sub">配置、生词本、导出文件都在这里</span></div>
+        <div class="grow dim" id="dataDir" style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+        <button class="btn" onclick="window.pywebview.api.open_folder('data')">打开</button>
       </div>
     </div>
   </div>
 
   <div class="foot">
-    <div class="state" id="state">设置会写入程序目录的 config.json</div>
+    <div class="state" id="state">设置会写入数据目录的 config.json</div>
     <button class="btn" onclick="closeMe()">关闭</button>
     <button class="btn primary" id="saveBtn" onclick="saveAll()">保存并应用</button>
   </div>
@@ -195,9 +232,9 @@
   var DEFAULT_KEYS = {
     lookup: "ctrl+alt+d",
     translate: "ctrl+alt+t",
-    capture: "ctrl+alt+a",
+    capture: "ctrl+alt+e",
     toggle_auto: "ctrl+alt+s",
-    add_vocab: "ctrl+shift+a",
+    add_vocab: "ctrl+alt+b",
     quit: "ctrl+alt+q"
   };
   var KEY_LABELS = {
@@ -208,7 +245,7 @@
     add_vocab: ["收藏生词", "把当前词收进生词本"],
     quit: ["退出程序", "完全关闭"]
   };
-  var data = { hotkeys: {}, dictionaries: [], accent: "us" };
+  var data = { hotkeys: {}, dictionaries: [], accent: "us", capture_modifier: "" };
   var listening = null;
 
   function esc(s) {
@@ -272,16 +309,21 @@
       listening = null;
       return;
     }
-    var k = e.key;
-    if (["Control", "Alt", "Shift", "Meta"].indexOf(k) >= 0) return;
+    if (["Control", "Alt", "Shift", "Meta"].indexOf(e.key) >= 0) return;
     var mods = [];
     if (e.ctrlKey) mods.push("ctrl");
     if (e.altKey) mods.push("alt");
     if (e.shiftKey) mods.push("shift");
     if (e.metaKey) mods.push("win");
-    if (!mods.length) { flash("快捷键至少要带 Ctrl / Alt / Win 之一", false); return; }
-    var name = k.length === 1 ? k.toLowerCase() : k.toLowerCase();
+    if (!(e.ctrlKey || e.altKey || e.metaKey)) { flash("快捷键至少要带 Ctrl / Alt / Win 之一（只带 Shift 会影响正常打字）", false); return; }
+    // 用物理键位（e.code）而不是 e.key：按着 Shift/Alt 时 e.key 会变成符号或大写
+    var name = keyName(e.code);
+    if (!name) { flash("这个键不能当快捷键，请用字母、数字或 F1–F12", false); return; }
     var spec = mods.join("+") + "+" + name;
+    var dup = Object.keys(data.hotkeys).filter(function (a) {
+      return a !== listening && data.hotkeys[a] && data.hotkeys[a].spec === spec;
+    })[0];
+    if (dup) { flash("和「" + KEY_LABELS[dup][0] + "」重复了，换一个组合", false); return; }
     data.hotkeys[listening].spec = spec;
     data.hotkeys[listening].ok = null;
     var el2 = document.getElementById("key-" + listening);
@@ -290,6 +332,15 @@
     if (dot) dot.className = "dot none";
     listening = null;
   }, true);
+
+  function keyName(code) {
+    if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
+    if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+    if (/^F([1-9]|1[0-2])$/.test(code)) return code.toLowerCase();
+    if (code === "Space") return "space";
+    if (code === "Tab") return "tab";
+    return null;
+  }
 
   function resetKeys() {
     Object.keys(DEFAULT_KEYS).forEach(function (a) {
@@ -308,9 +359,10 @@
     } else {
       var html = "";
       data.dictionaries.forEach(function (d, i) {
-        html += '<div class="dict">' +
+        html += '<div class="dict' + (d.missing ? ' missing' : '') + '">' +
           '<div class="dn" title="' + esc(d.path) + '">' + esc(d.name) + '</div>' +
-          '<div class="dm">' + (d.count ? Number(d.count).toLocaleString() + " 条" : "待加载") +
+          '<div class="dm" title="' + esc(d.path) + '">' +
+            (d.missing ? "找不到文件，请删除或重新添加" : d.count ? Number(d.count).toLocaleString() + " 条" : "待加载") +
             ' · ' + esc(d.path.split("\\").slice(-1)[0]) + '</div>' +
           '<div class="ops">' +
             '<button class="btn" onclick="moveDict(' + i + ',-1)" ' + (i === 0 ? "disabled" : "") + '>↑</button>' +
@@ -352,6 +404,35 @@
     });
   }
 
+  function setMod(m) {
+    data.capture_modifier = m;
+    document.querySelectorAll("#modSeg button").forEach(function (b) {
+      b.classList.toggle("on", b.dataset.mod === m);
+    });
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("#modSeg button");
+    if (b) setMod(b.dataset.mod);
+  });
+
+  function downloadEcdict() {
+    var btn = document.getElementById("ecdictBtn");
+    btn.disabled = true;
+    window.pywebview.api.download_ecdict().then(function (res) {
+      if (!res || !res.ok) { btn.disabled = false; flash((res && res.error) || "启动下载失败", false); }
+    });
+  }
+  window.ecdictProgress = function (p) {
+    var bar = document.getElementById("ecdictProg");
+    bar.style.display = p.done ? "none" : "block";
+    bar.firstElementChild.style.width = (p.pct || 0) + "%";
+    document.getElementById("dictNote").textContent = p.msg || "";
+    if (p.done) {
+      document.getElementById("ecdictBtn").disabled = false;
+      flash(p.msg, p.ok);
+    }
+  };
+
   function setAccent(a) {
     data.accent = a;
     document.querySelectorAll("#accentSeg button").forEach(function (b) {
@@ -377,6 +458,19 @@
     document.getElementById("hoverDelay").value = delay;
     document.getElementById("hoverVal").textContent = delay + " 毫秒";
     setAccent(d.accent === "uk" ? "uk" : "us");
+    setMod(d.capture_modifier || "");
+    document.getElementById("baiduAppid").value = d.baidu_appid || "";
+    document.getElementById("baiduKey").value = d.baidu_key || "";
+    document.getElementById("dataDir").textContent = d.data_dir || "";
+    document.getElementById("dataDir").title = d.data_dir || "";
+    var quit = d.hotkeys && d.hotkeys.quit;
+    document.querySelectorAll('[data-hk-spec="quit"]').forEach(function (el) {
+      el.textContent = pretty(quit && quit.spec);
+    });
+    if (d.ecdict && d.ecdict.running) {
+      document.getElementById("ecdictBtn").disabled = true;
+      window.ecdictProgress({ pct: d.ecdict.pct, msg: d.ecdict.msg });
+    }
     document.getElementById("state").textContent =
       "配置目录：" + (d.config_path || "程序目录") + "　·　保存即生效";
   };
@@ -399,6 +493,9 @@
       hover_delay_ms: parseInt(document.getElementById("hoverDelay").value, 10),
       online_translate: document.getElementById("onlineTranslate").checked,
       accent: data.accent,
+      capture_modifier: data.capture_modifier || "",
+      baidu_appid: document.getElementById("baiduAppid").value.trim(),
+      baidu_key: document.getElementById("baiduKey").value.trim(),
       autostart: document.getElementById("autostart").checked,
       hide_tray_icon: document.getElementById("hideTray").checked
     };

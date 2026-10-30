@@ -88,7 +88,7 @@
     </span>
   </div>
   <div class="inner" id="inner"><div class="empty"><span class="spin"></span>正在取词…</div></div>
-  <div class="foot" id="foot"><span class="deco">✿</span><span>Ctrl+Alt+D 查词 · Ctrl+Alt+A 取词 · 「钉住」保留</span>
+  <div class="foot" id="foot"><span class="deco">✿</span><span><span data-hk="lookup">Ctrl+Alt+D</span> 查词 · <span data-hk="capture">Ctrl+Alt+E</span> 取词 · 「钉住」保留</span>
     <span style="margin-left:auto" class="deco">✎</span></div>
 </div>
 <script>
@@ -185,6 +185,16 @@
       if (data) { window.renderFloat(data); }
     }).catch(function () { polling = false; });
   }, 120);
+
+  // 快捷键提示文字跟着设置走（改键后不用改页面）
+  window.setHotkeys = function (hk) {
+    document.querySelectorAll("[data-hk]").forEach(function (el) {
+      if (hk && hk[el.dataset.hk]) el.textContent = hk[el.dataset.hk];
+    });
+  };
+  window.addEventListener("pywebviewready", function () {
+    window.pywebview.api.get_hotkeys().then(window.setHotkeys);
+  });
 </script>
 </body>
 </html>

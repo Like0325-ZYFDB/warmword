@@ -66,6 +66,7 @@
 <body>
 <div class="wrap">
   <div class="title"><span class="deco">✿</span>暖词 · 翻译选中内容<span class="deco">✎</span>
+    <button class="btn" onclick="copyTrans()">复制译文</button>
     <button class="btn" onclick="retranslate()">重新翻译</button></div>
   <div class="panel">
     <div class="label">原文</div>
@@ -74,10 +75,10 @@
   </div>
   <div class="label" style="margin:9px 2px 5px;">句中生词 · 点开看释义</div>
   <div class="words" id="words"><div class="empty">—</div></div>
-  <div class="label" style="margin-top:6px;">Ctrl+Alt+T 翻译新内容 · Esc 关闭</div>
+  <div class="label" style="margin-top:6px;"><span data-hk="translate">Ctrl+Alt+T</span> 翻译新内容 · Esc 关闭<span id="src"></span></div>
 </div>
 <script>
-  var currentText = "";
+  var currentText = "", currentTrans = "";
   window.__words = [];
 
   function esc(s) {
@@ -89,22 +90,26 @@
   window.renderTranslate = function (data) {
     currentText = data.original || "";
     window.__words = (data.words || []).map(function (w) { return w.word; });
+    currentTrans = data.translated || "";
     document.getElementById("orig").textContent = data.original || "—";
+    var failMsg = data.online === false
+      ? "联网翻译已关闭（设置里可打开），下方是句中生词释义"
+      : "翻译不可用：联网翻译没连上。国内网络建议在设置里填百度翻译的 APP ID 和密钥";
     document.getElementById("trans").innerHTML =
-      data.loading ? '<span class="spin"></span>翻译中…'
-        : esc(data.translated || "翻译不可用（联网翻译没连上），可看下方生词释义");
+      data.loading ? '<span class="spin"></span>翻译中…' : esc(data.translated || failMsg);
+    document.getElementById("src").textContent = data.source ? " · 来源：" + data.source : "";
 
     var words = data.words || [];
     var box = document.getElementById("words");
     if (!words.length) {
-      box.innerHTML = '<div class="empty">句子里没有需要查的生词</div>';
+      box.innerHTML = '<div class="empty">句子里没有生词（常用词已略过）</div>';
       return;
     }
     var html = "";
     words.forEach(function (item, i) {
       html += '<div class="w-item">' +
         '<div class="w-head" onclick="toggle(' + i + ')">' +
-          '<span class="w-word">' + esc(item.word) + '</span>' +
+          '<span class="w-word">' + esc(item.word) + (item.saved ? ' <span title="在生词本里">★</span>' : '') + '</span>' +
           '<span class="w-brief">' + esc(item.brief) + '</span>' +
         '</div>' +
         '<div class="w-body" id="wb' + i + '">' + (item.html || "") + '</div>' +
@@ -131,12 +136,27 @@
     if (!currentText) return;
     document.getElementById("trans").innerHTML = '<span class="spin"></span>翻译中…';
     window.pywebview.api.translate_text(currentText).then(function (t) {
+      currentTrans = t || "";
       document.getElementById("trans").innerHTML = esc(t || "翻译不可用");
     });
   }
 
+  function copyTrans() {
+    if (currentTrans) window.pywebview.api.copy_text(currentTrans);
+  }
+
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") window.pywebview.api.close_window("translate");
+  });
+
+  // 快捷键提示文字跟着设置走（改键后不用改页面）
+  window.setHotkeys = function (hk) {
+    document.querySelectorAll("[data-hk]").forEach(function (el) {
+      if (hk && hk[el.dataset.hk]) el.textContent = hk[el.dataset.hk];
+    });
+  };
+  window.addEventListener("pywebviewready", function () {
+    window.pywebview.api.get_hotkeys().then(window.setHotkeys);
   });
 </script>
 </body>

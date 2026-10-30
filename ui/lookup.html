@@ -30,7 +30,11 @@
         max-height: 240px; overflow-y: auto;
   }
   .suggest div { padding: 7px 13px; font-size: 13px; cursor: pointer; color: #5a4a36; }
-  .suggest div:hover { background: #f3e8d2; }
+  .suggest div:hover, .suggest div.on { background: #f3e8d2; }
+  .dym { margin-top: 14px; }
+  .dym a { display: inline-block; margin: 4px 5px; padding: 3px 11px; border-radius: 9px;
+           border: 1px solid #d9c8a6; color: #8a6a45; cursor: pointer; text-decoration: none; }
+  .dym a:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
   .body {
     margin-top: 10px; flex: 1; overflow-y: auto;
     background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 14px;
@@ -86,10 +90,10 @@
   <div class="body" id="body">
     <div class="empty">输入单词开始查词<br><br>—— 词典在手，慢慢探索 ——</div>
   </div>
-  <div class="hint">Esc 关闭　·　Ctrl+Alt+T 翻译选中　·　Ctrl+Alt+A 取词　·　变形自动回溯</div>
+  <div class="hint">↑↓ 选补全 · Esc 关闭　·　<span data-hk="translate">Ctrl+Alt+T</span> 翻译选中　·　<span data-hk="capture">Ctrl+Alt+E</span> 取词　·　变形自动回溯</div>
 </div>
 <script>
-  var timer = null, currentWord = "";
+  var timer = null, currentWord = "", seq = 0, active = -1, suggestWords = [];
   var q = document.getElementById("q");
   var suggestBox = document.getElementById("suggest");
 
@@ -98,8 +102,28 @@
     timer = setTimeout(doSearch, 220);
   });
   q.addEventListener("keydown", function (e) {
-    if (e.key === "Enter") { clearTimeout(timer); doSearch(); }
-    if (e.key === "Escape") { window.pywebview.api.close_window("lookup"); }
+    var open = suggestBox.style.display === "block" && suggestWords.length;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (!open) return;
+      e.preventDefault();
+      var n = suggestWords.length;
+      active = e.key === "ArrowDown" ? (active + 1) % n : (active - 1 + n) % n;
+      highlight();
+      return;
+    }
+    if (e.key === "Enter") {
+      clearTimeout(timer);
+      if (open && active >= 0) { pickSuggest(suggestWords[active]); return; }
+      hideSuggest();
+      doSearch(true);
+    }
+    if (e.key === "Escape") {
+      if (open) { hideSuggest(); return; }  // 先收起补全，再按一次 Esc 关窗
+      window.pywebview.api.close_window("lookup");
+    }
+  });
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest || !e.target.closest(".search-box")) hideSuggest();
   });
 
   function esc(s) {
@@ -107,48 +131,85 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
     });
   }
+  function hideSuggest() { suggestBox.style.display = "none"; active = -1; }
+  function highlight() {
+    Array.prototype.forEach.call(suggestBox.children, function (el, i) {
+      el.classList.toggle("on", i === active);
+    });
+  }
 
-  function doSearch() {
+  function doSearch(noSuggest) {
     var w = q.value.trim();
-    if (!w) { suggestBox.style.display = "none"; return; }
-    window.pywebview.api.search(w).then(function (data) { renderLookup(data); });
+    var my = ++seq;  // 打字快时旧请求可能后回来，只认最新一次
+    if (!w) { hideSuggest(); return; }
+    window.pywebview.api.search(w).then(function (data) {
+      if (my === seq) renderLookup(data);
+    });
+    if (noSuggest === true) return;
     window.pywebview.api.suggest(w).then(function (words) {
-      if (!words || !words.length) { suggestBox.style.display = "none"; return; }
+      if (my !== seq) return;
+      suggestWords = words || [];
+      active = -1;
+      if (!suggestWords.length || (suggestWords.length === 1 && suggestWords[0] === w.toLowerCase())) {
+        hideSuggest();
+        return;
+      }
       var html = "";
-      words.forEach(function (x) {
-        html += '<div onclick="pickSuggest(\'' + esc(x).replace(/'/g, "\\'") + '\')">' + esc(x) + '</div>';
+      suggestWords.forEach(function (x, i) {
+        html += '<div data-i="' + i + '">' + esc(x) + '</div>';
       });
       suggestBox.innerHTML = html;
       suggestBox.style.display = "block";
     });
   }
+  suggestBox.addEventListener("click", function (e) {
+    var el = e.target.closest && e.target.closest("[data-i]");
+    if (el) pickSuggest(suggestWords[+el.dataset.i]);
+  });
 
   function pickSuggest(w) {
     q.value = w;
-    suggestBox.style.display = "none";
+    hideSuggest();
     clearTimeout(timer);
-    doSearch();
+    doSearch(true);
   }
 
   window.renderLookup = function (data) {
     currentWord = data.word || "";
     var body = document.getElementById("body");
-    suggestBox.style.display = "none";
+    if (data.word && q.value.trim() !== data.word) q.value = data.word;
     if (!data.entries || !data.entries.length) {
-      body.innerHTML = '<div class="empty">「' + esc(data.word) + '」没有找到释义<br><br>换个词试试？</div>';
+      var html = '<div class="empty">「' + esc(data.word) + '」没有找到释义';
+      if (data.status) {
+        html += '<br><br>' + esc(data.status);
+      } else if (data.did_you_mean && data.did_you_mean.length) {
+        html += '<div class="dym">你要找的是不是：<br>';
+        data.did_you_mean.forEach(function (x) {
+          html += '<a data-w="' + esc(x).replace(/"/g, "&quot;") + '">' + esc(x) + '</a>';
+        });
+        html += '</div>';
+      } else {
+        html += '<br><br>换个词试试？';
+      }
+      body.innerHTML = html + '</div>';
       return;
     }
-    var html = '<div class="word-head">' + esc(data.word) +
+    var head = '<div class="word-head">' + esc(data.word) +
       '<button class="btn" onclick="speak(\'uk\')">英</button>' +
       '<button class="btn" onclick="speak(\'us\')">美</button>' +
       '<button class="btn" id="vbtn" onclick="addVocabWord()">收藏</button></div>';
     data.entries.forEach(function (e) {
-      html += '<div class="entry"><div class="dict-name">' + esc(e.dict) + '</div>' +
+      head += '<div class="entry"><div class="dict-name">' + esc(e.dict) + '</div>' +
               '<div class="def-body">' + e.html + '</div></div>';
     });
-    body.innerHTML = html;
+    body.innerHTML = head;
     document.body.scrollTop = 0;
+    body.scrollTop = 0;
   };
+  document.getElementById("body").addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest(".dym a");
+    if (a) pickSuggest(a.dataset.w);
+  });
 
   function speak(accent) {
     if (currentWord) window.pywebview.api.speak(currentWord, accent);
@@ -167,6 +228,16 @@
   }
 
   window.focusSearch = function () { q.focus(); q.select(); };
+
+  // 快捷键提示文字跟着设置走（改键后不用改页面）
+  window.setHotkeys = function (hk) {
+    document.querySelectorAll("[data-hk]").forEach(function (el) {
+      if (hk && hk[el.dataset.hk]) el.textContent = hk[el.dataset.hk];
+    });
+  };
+  window.addEventListener("pywebviewready", function () {
+    window.pywebview.api.get_hotkeys().then(window.setHotkeys);
+  });
 </script>
 </body>
 </html>

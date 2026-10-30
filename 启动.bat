@@ -32,9 +32,7 @@ if not exist venv\Scripts\pythonw.exe (
     echo 环境准备完成。
 )
 
-if not exist config.json (
-    if exist config.example.json copy config.example.json config.json >nul
-)
+rem 配置和生词本放在 %APPDATA%\WarmWord（程序目录放 portable.txt 则放程序目录）
 
 start "" venv\Scripts\pythonw.exe app.py
 exit

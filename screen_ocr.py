@@ -119,8 +119,8 @@ def word_at(x: int, y: int, span_left: int = 300, span_right: int = 300,
             span_y: int = 45) -> str | None:
     """识别鼠标坐标下的英文词或中文字。"""
     try:
-        box = (max(0, x - span_left), max(0, y - span_y),
-               x + span_right, y + span_y)
+        # 不要把坐标夹到 0：副屏在主屏左边/上边时坐标本来就是负的（截图按虚拟桌面处理）
+        box = (x - span_left, y - span_y, x + span_right, y + span_y)
         img = ImageGrab.grab(bbox=box, all_screens=True)
         arr = np.array(img)[:, :, ::-1]  # RGB -> BGR
         result, _ = _engine()(arr)
@@ -143,7 +143,7 @@ def word_at(x: int, y: int, span_left: int = 300, span_right: int = 300,
 def sentence_at(x: int, y: int) -> str | None:
     """识别鼠标所在整行文字（给整句翻译用）。"""
     try:
-        box = (max(0, x - 700), max(0, y - 30), x + 700, y + 30)
+        box = (x - 700, y - 30, x + 700, y + 30)
         img = ImageGrab.grab(bbox=box, all_screens=True)
         arr = np.array(img)[:, :, ::-1]
         result, _ = _engine()(arr)

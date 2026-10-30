@@ -21,3 +21,10 @@ Thumbs.db
 desktop.ini
 .DS_Store
 *.zip
+
+# 打包
+build/
+dist/
+*.spec
+.pytest_cache/
+portable.txt

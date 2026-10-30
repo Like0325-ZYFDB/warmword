@@ -1,0 +1,64 @@
+name: 构建 Windows 版
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pytest
+
+      - name: 单元测试
+        run: python -m pytest -q tests
+
+      - name: 导入检查（Windows 专用模块）
+        run: python -c "import text_capture, screen_ocr, capture_client, capture_service, dict_engine, translate, wordlist, paths"
+
+      - name: 生成 UI Automation 接口（打包时一起带上）
+        run: python -c "from comtypes.client import GetModule; GetModule('UIAutomationCore.dll')"
+
+      - name: 打包
+        run: >
+          pyinstaller --noconfirm --windowed --name WarmWord
+          --add-data "ui;ui"
+          --collect-all rapidocr_onnxruntime
+          --collect-submodules comtypes.gen
+          --hidden-import capture_service
+          app.py
+
+      - name: 冒烟测试（打包后的取词服务能启动、能加载识别模型）
+        run: python tests/smoke_frozen.py dist/WarmWord/WarmWord.exe
+
+      - name: 压缩
+        shell: pwsh
+        run: |
+          Copy-Item README.md, LICENSE, config.example.json dist/WarmWord/
+          Compress-Archive -Path dist/WarmWord -DestinationPath WarmWord-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WarmWord-windows
+          path: WarmWord-windows.zip
+
+      - name: 发布 Release（打 v* 标签时）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: WarmWord-windows.zip

@@ -56,11 +56,12 @@
   <div class="title"><span class="deco">✿</span>暖词 · 生词本<span class="deco">✎</span>
     <span class="tip" id="count"></span>
     <button class="btn" onclick="exportCsv()">导出表格</button>
+    <button class="btn" onclick="exportAnki()" title="Anki：文件 → 导入，选这个 txt">导出 Anki</button>
     <button class="btn" onclick="clearAll()">清空</button>
     <button class="btn" onclick="closeMe()">关闭</button>
   </div>
-  <div class="list" id="list"><div class="empty">还没有收藏的单词<br><br>取词后点小窗上的「收藏」，或按 Ctrl+Shift+A</div></div>
-  <div class="hint">按 Ctrl+Shift+A 把鼠标下的词收进生词本　·　导出文件在程序目录的「导出」文件夹</div>
+  <div class="list" id="list"><div class="empty">还没有收藏的单词<br><br>取词后点小窗上的「收藏」，或按 <span data-hk="add_vocab">Ctrl+Alt+B</span></div></div>
+  <div class="hint">按 <span data-hk="add_vocab">Ctrl+Alt+B</span> 把鼠标下的词收进生词本　·　导出后会自动打开所在文件夹</div>
 </div>
 <script>
   function esc(s) {
@@ -74,7 +75,7 @@
     document.getElementById("count").textContent = items.length ? "共 " + items.length + " 个" : "";
     var box = document.getElementById("list");
     if (!items.length) {
-      box.innerHTML = '<div class="empty">还没有收藏的单词<br><br>取词后点小窗上的「收藏」，或按 Ctrl+Shift+A</div>';
+      box.innerHTML = '<div class="empty">还没有收藏的单词<br><br>取词后点小窗上的「收藏」，或用收藏快捷键</div>';
       return;
     }
     var html = "";
@@ -96,32 +97,39 @@
       window.renderVocab({ items: items });
     });
   }
-  function speak(w) { window.pywebview.api.speak_word(w, "us"); }
+  function speak(w) { window.pywebview.api.speak_word(w, ""); }  // 空 = 用设置里的默认口音
   function del(w) {
     window.pywebview.api.remove_vocab(w).then(function () { reload(); });
   }
   function clearAll() {
     window.pywebview.api.list_vocab().then(function (items) {
       if (!items.length) return;
-      var chain = Promise.resolve();
-      items.forEach(function (it) {
-        chain = chain.then(function () { return window.pywebview.api.remove_vocab(it.word); });
-      });
-      chain.then(function () { reload(); });
+      if (!confirm("确定清空全部 " + items.length + " 个生词？清空后不能恢复（可以先导出备份）。")) return;
+      window.pywebview.api.clear_vocab().then(function () { reload(); });
     });
   }
-  function exportCsv() {
-    window.pywebview.api.export_vocab().then(function (path) {
-      document.getElementById("hint") && 0;
-      var el = document.getElementById("count");
-      el.textContent = path ? "已导出：" + path.split("\\").pop() : "生词本是空的";
-    });
+  function exported(path) {
+    var el = document.getElementById("count");
+    el.textContent = path ? "已导出：" + path.split("\\").pop() : "生词本是空的";
+    if (path) window.pywebview.api.open_folder("export");
   }
+  function exportCsv() { window.pywebview.api.export_vocab().then(exported); }
+  function exportAnki() { window.pywebview.api.export_anki().then(exported); }
   function closeMe() { window.pywebview.api.close_window("vocab"); }
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") closeMe();
   });
   reload();
+
+  // 快捷键提示文字跟着设置走（改键后不用改页面）
+  window.setHotkeys = function (hk) {
+    document.querySelectorAll("[data-hk]").forEach(function (el) {
+      if (hk && hk[el.dataset.hk]) el.textContent = hk[el.dataset.hk];
+    });
+  };
+  window.addEventListener("pywebviewready", function () {
+    window.pywebview.api.get_hotkeys().then(window.setHotkeys);
+  });
 </script>
 </body>
 </html>

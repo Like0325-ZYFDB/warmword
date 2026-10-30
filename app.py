@@ -7,7 +7,7 @@
   3. 快捷查词     —— 全局热键弹出查词窗（默认 Ctrl+Alt+D）
   4. 翻译选中内容 —— 全局热键翻译选中文字并列出句中生词（默认 Ctrl+Alt+T）
 
-运行：venv313\\Scripts\\pythonw.exe app.py
+运行：venv\\Scripts\\pythonw.exe app.py（或双击 启动.bat）
 """
 from __future__ import annotations
 
@@ -22,20 +22,27 @@ except Exception:
     except Exception:
         pass
 
+import sys  # noqa: E402
+
+if "--capture-service" in sys.argv:  # 打包版：同一个 exe 兼任取词服务子进程
+    import capture_service
+    capture_service.main()
+    raise SystemExit(0)
+
 import ctypes.wintypes
 import hashlib
 import html as html_mod
 import json
 import os
 import re
-import sys
 import threading
 import time
 import urllib.parse
 from html.parser import HTMLParser
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+from paths import BASE, DATA, FROZEN, PORTABLE, RES, migrate_old_data  # noqa: E402
+
 sys.path.insert(0, str(BASE))
 
 import requests  # noqa: E402
@@ -43,8 +50,9 @@ import webview  # noqa: E402
 
 from dict_engine import DictEngine, Entry  # noqa: E402
 from capture_client import CaptureClient  # noqa: E402
-from text_capture import set_clipboard_text, get_clipboard_text, copy_selection  # noqa: E402
+from text_capture import set_clipboard_text, copy_selection_text  # noqa: E402
 import translate as translator  # noqa: E402
+from wordlist import pick_new_words  # noqa: E402
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -66,11 +74,14 @@ HOTKEY_LABELS = {
     "add_vocab": "收藏生词",
     "quit": "退出程序",
 }
-VOCAB_PATH = BASE / "生词本.json"
+VOCAB_PATH = DATA / "生词本.json"
+DICT_DIR = DATA / "词库"            # 下载的 ECDICT 放这里
+INDEX_DIR = DATA / "cache" / "index"  # ECDICT csv 转出来的 sqlite 索引
+ECDICT_URL = "https://raw.githubusercontent.com/skywind3000/ECDICT/master/ecdict.csv"
 
 
 # ---------------- 日志 ----------------
-LOG_DIR = BASE / "logs"
+LOG_DIR = DATA / "logs"
 LOG_FILE = LOG_DIR / "运行日志.txt"
 
 
@@ -81,7 +92,7 @@ def log(msg: str) -> None:
     except Exception:
         pass
     try:
-        LOG_DIR.mkdir(exist_ok=True)
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
         if LOG_FILE.exists() and LOG_FILE.stat().st_size > 512 * 1024:
             LOG_FILE.replace(LOG_FILE.with_suffix(".old.txt"))
         with open(LOG_FILE, "a", encoding="utf-8") as f:
@@ -97,13 +108,13 @@ def single_instance() -> bool:
 
 
 QUIT_EVENT = "WarmWordHelper_QuitEvent_v1"
+SHOW_EVENT = "WarmWordHelper_ShowLookup_v1"
 
 
-def ask_old_instance_quit() -> bool:
-    """通知正在跑的旧实例退出（用于托盘「重启程序」）。"""
+def signal_event(name: str) -> bool:
     try:
         kernel32.OpenEventW.restype = ctypes.c_void_p
-        h = kernel32.OpenEventW(0x0002, False, QUIT_EVENT)  # EVENT_MODIFY_STATE
+        h = kernel32.OpenEventW(0x0002, False, name)  # EVENT_MODIFY_STATE
         if not h:
             return False
         kernel32.SetEvent(ctypes.c_void_p(h))
@@ -111,6 +122,24 @@ def ask_old_instance_quit() -> bool:
         return True
     except Exception:
         return False
+
+
+def ask_old_instance_quit() -> bool:
+    """通知正在跑的旧实例退出（用于托盘「重启程序」）。"""
+    return signal_event(QUIT_EVENT)
+
+
+def show_watcher() -> None:
+    """再次双击启动时，新实例发信号过来：唤出查词窗。"""
+    try:
+        kernel32.CreateEventW.restype = ctypes.c_void_p
+        h = kernel32.CreateEventW(None, False, False, SHOW_EVENT)
+        while not STATE.quit:
+            if kernel32.WaitForSingleObject(ctypes.c_void_p(h), 1000) == 0:
+                log("[启动] 收到再次启动的信号，唤出查词窗")
+                show_lookup()
+    except Exception as e:
+        log(f"[启动] 唤出信号监听失败 {e!r}")
 
 
 def quit_watcher() -> None:
@@ -129,38 +158,31 @@ def quit_watcher() -> None:
 
 # ---------------- 配置 ----------------
 DEFAULT_CONFIG = {
-    "dictionaries": [
-        {
-            "path": r"C:\词典\oaldpe.mdx",
-            "name": "牛津高阶",
-        },
-        {
-            "path": r"C:\词典\麦克米伦高阶英汉双解.mdx",
-            "name": "麦克米伦英汉双解",
-        },
-        {
-            "path": r"C:\词典\oaldZhEn.mdx",
-            "name": "牛津汉英",
-        },
-    ],
+    "dictionaries": [],
+    # 避开常见冲突：Ctrl+Alt+A 是 QQ 截图，Ctrl+Shift+A 是钉钉截图 / Chrome 搜索标签页
     "hotkeys": {
         "lookup": "ctrl+alt+d",
         "translate": "ctrl+alt+t",
-        "capture": "ctrl+alt+a",
+        "capture": "ctrl+alt+e",
         "toggle_auto": "ctrl+alt+s",
-        "add_vocab": "ctrl+shift+a",
+        "add_vocab": "ctrl+alt+b",
         "quit": "ctrl+alt+q",
     },
     "auto_capture": True,
+    "capture_modifier": "",          # ""=停住就取词；"ctrl"/"shift"/"alt"=按住该键才取词
     "capture_only_english": True,
     "hover_delay_ms": 600,
     "online_translate": True,
+    "baidu_appid": "",
+    "baidu_key": "",
     "autostart": True,
     "hide_tray_icon": False,
     "accent": "us",
+    "debug": False,
 }
+CAPTURE_MODIFIERS = {"ctrl": 0x11, "shift": 0x10, "alt": 0x12}
 
-CONFIG_PATH = BASE / "config.json"
+CONFIG_PATH = DATA / "config.json"
 
 
 # ---------------- 生词本 ----------------
@@ -179,6 +201,19 @@ def save_vocab(items: list[dict]) -> None:
         log(f"[生词本] 保存失败 {e!r}")
 
 
+def vocab_words() -> set[str]:
+    return {i.get("word", "").lower() for i in load_vocab()}
+
+
+def brief_of(entry: Entry, limit: int = 140) -> str:
+    """简短释义：去掉开头重复的词头，换行压成空格。"""
+    text = plain_text(entry.html).replace("\n", " ")
+    head = (entry.headword or "").strip()
+    if head and text.lower().startswith(head.lower()):
+        text = text[len(head):].lstrip(" ·:：")
+    return re.sub(r"\s{2,}", " ", text)[:limit]
+
+
 def add_vocab(word: str) -> bool:
     word = (word or "").strip()
     if not word:
@@ -191,7 +226,7 @@ def add_vocab(word: str) -> bool:
     if ENGINE is not None:
         e = ENGINE.lookup(word)[:1]
         if e:
-            brief = plain_text(e[0].html)[:140].replace("\n", " ")
+            brief = brief_of(e[0])
     items.insert(0, {"word": word, "brief": brief,
                      "added_at": time.strftime("%Y-%m-%d %H:%M")})
     save_vocab(items)
@@ -209,13 +244,16 @@ def remove_vocab(word: str) -> bool:
     return True
 
 
+EXPORT_DIR = DATA / "导出"
+
+
 def export_vocab() -> str:
     import csv
     items = load_vocab()
     if not items:
         return ""
-    out_dir = BASE / "导出"
-    out_dir.mkdir(exist_ok=True)
+    out_dir = EXPORT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"生词本_{time.strftime('%Y%m%d_%H%M')}.csv"
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
@@ -226,11 +264,33 @@ def export_vocab() -> str:
     return str(path)
 
 
+def export_anki() -> str:
+    """导出成 Anki 可直接导入的文本：正面单词，背面释义（HTML），制表符分隔。"""
+    items = load_vocab()
+    if not items:
+        return ""
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    path = EXPORT_DIR / f"生词本_Anki_{time.strftime('%Y%m%d_%H%M')}.txt"
+    lines = ["#separator:tab", "#html:true", "#tags column:3"]
+    for i in items:
+        word = i.get("word", "")
+        back = html_mod.escape(i.get("brief", ""))
+        if ENGINE is not None:
+            e = ENGINE.lookup(word)[:1]
+            if e:
+                back = clean_html(e[0].html)[:3000]
+        back = back.replace("\t", " ").replace("\n", "<br>")
+        lines.append(f"{word}\t{back}\t暖词")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    log(f"[生词本] 已导出 Anki 文件 {path}")
+    return str(path)
+
+
 def load_config() -> dict:
+    cfg = json.loads(json.dumps(DEFAULT_CONFIG))
     if CONFIG_PATH.exists():
         try:
             user_cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-            cfg = json.loads(json.dumps(DEFAULT_CONFIG))
             for k, v in user_cfg.items():
                 if isinstance(v, dict) and isinstance(cfg.get(k), dict):
                     cfg[k].update(v)
@@ -238,10 +298,19 @@ def load_config() -> dict:
                     cfg[k] = v
             return cfg
         except Exception as e:
-            log(f"[配置] 读取失败，用默认: {e!r}")
-    CONFIG_PATH.write_text(
-        json.dumps(DEFAULT_CONFIG, ensure_ascii=False, indent=2), encoding="utf-8")
-    return json.loads(json.dumps(DEFAULT_CONFIG))
+            # 不要直接覆盖：先把坏掉的配置留个备份，方便找回
+            backup = CONFIG_PATH.with_name("config.broken.json")
+            log(f"[配置] 读取失败，改用默认，原文件备份为 {backup.name}: {e!r}")
+            try:
+                CONFIG_PATH.replace(backup)
+            except Exception:
+                pass
+    try:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        log(f"[配置] 写入默认配置失败: {e!r}")
+    return cfg
 
 
 def save_config() -> None:
@@ -370,6 +439,25 @@ def plain_text(raw: str) -> str:
     return re.sub(r"[ \t]+", " ", t).strip()
 
 
+# ---------------- 提示 ----------------
+_LAST_NOTES: dict[str, float] = {}
+
+
+def notify(msg: str, key: str | None = None, interval: float = 6.0) -> None:
+    """托盘气泡提示（同一条提示 interval 秒内只弹一次）。失败的操作一定要让用户看得到。"""
+    log(f"[提示] {msg}")
+    k = key or msg
+    now = time.time()
+    if now - _LAST_NOTES.get(k, 0) < interval:
+        return
+    _LAST_NOTES[k] = now
+    try:
+        if TRAY_ICON is not None and getattr(TRAY_ICON, "HAS_NOTIFICATION", False):
+            TRAY_ICON.notify(msg, "暖词")
+    except Exception as e:
+        log(f"[提示] 气泡失败 {e!r}")
+
+
 # ---------------- 热键解析 ----------------
 VK_MAP = {chr(ord("a") + i): 0x41 + i for i in range(26)}
 VK_MAP.update({str(i): 0x30 + i for i in range(10)})
@@ -380,6 +468,19 @@ MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN = 0x0001, 0x0002, 0x0004, 0x0008
 MOD_NOREPEAT = 0x4000
 WM_HOTKEY = 0x0312
 WM_APP_RELOAD_HOTKEYS = 0x8001
+
+
+def hotkey_text(action: str) -> str:
+    """快捷键的显示文字，如 Ctrl+Alt+D（界面和托盘菜单都用它，改键后自动跟着变）。"""
+    spec = CONFIG.get("hotkeys", {}).get(action, "")
+    if not spec:
+        return "未设置"
+    names = {"ctrl": "Ctrl", "alt": "Alt", "shift": "Shift", "win": "Win"}
+    return "+".join(names.get(p, p.upper()) for p in spec.split("+"))
+
+
+def hotkey_texts() -> dict:
+    return {a: hotkey_text(a) for a in HOTKEY_LABELS}
 
 
 def parse_hotkey(spec: str):
@@ -428,7 +529,7 @@ TRAY_ICON = None
 
 
 # ---------------- 发音 ----------------
-VOICE_CACHE = BASE / "cache"
+VOICE_CACHE = DATA / "cache"
 
 
 def _play_mp3(path: Path) -> bool:
@@ -449,14 +550,14 @@ def speak(word: str, accent: str = "us") -> bool:
         return False
     voice_type = "2" if accent == "us" else "1"
     key = hashlib.md5(f"{word}|{voice_type}".encode("utf-8")).hexdigest()
-    VOICE_CACHE.mkdir(exist_ok=True)
+    VOICE_CACHE.mkdir(parents=True, exist_ok=True)
     path = VOICE_CACHE / f"{key}.mp3"
     if not path.exists():
         try:
             r = requests.get(
                 "https://dict.youdao.com/dictvoice",
                 params={"audio": word, "type": voice_type},
-                headers=translator.HEADERS, timeout=8)
+                headers=translator.HEADERS, timeout=(3, 8))
             if r.status_code != 200 or len(r.content) < 800:
                 log(f"[发音] 没拿到音频 {word} code={r.status_code} size={len(r.content)}")
                 return False
@@ -489,13 +590,32 @@ def autostart_enabled() -> bool:
         return False
 
 
+def autostart_command() -> str:
+    """开机自启要执行的命令：用当前正在运行的解释器（以前写死 venv313，和 启动.bat 建的 venv 对不上）。"""
+    if FROZEN:
+        return f'"{sys.executable}"'
+    exe = Path(sys.executable)
+    pythonw = exe.with_name("pythonw.exe")
+    if pythonw.exists():
+        exe = pythonw
+    return f'"{exe}" "{BASE / "app.py"}"'
+
+
+def autostart_value() -> str | None:
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+            return winreg.QueryValueEx(k, AUTOSTART_NAME)[0]
+    except OSError:
+        return None
+
+
 def set_autostart(on: bool) -> bool:
     import winreg
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
             if on:
-                target = f'"{BASE / "venv313" / "Scripts" / "pythonw.exe"}" "{BASE / "app.py"}"'
-                winreg.SetValueEx(k, AUTOSTART_NAME, 0, winreg.REG_SZ, target)
+                winreg.SetValueEx(k, AUTOSTART_NAME, 0, winreg.REG_SZ, autostart_command())
             else:
                 try:
                     winreg.DeleteValue(k, AUTOSTART_NAME)
@@ -509,9 +629,16 @@ def set_autostart(on: bool) -> bool:
 
 
 def ensure_autostart() -> None:
-    """首次运行按配置开启自启；之后以注册表实际状态为准。"""
-    if CONFIG.get("autostart", True) and not autostart_enabled():
+    """按配置开启自启；注册表里的路径过期了（换过目录/虚拟环境）就改成当前路径。"""
+    if CONFIG.get("autostart", True) and autostart_value() != autostart_command():
         set_autostart(True)
+
+
+def change_autostart(on: bool) -> None:
+    """托盘和设置里切换自启：同时写回配置，否则下次启动又被 ensure_autostart 改回去。"""
+    set_autostart(on)
+    CONFIG["autostart"] = bool(on)
+    save_config()
 
 
 # ---------------- 窗口 ----------------
@@ -534,6 +661,13 @@ def push(win_name: str, func: str, data) -> None:
         win.evaluate_js(f"{func}({json.dumps(data, ensure_ascii=False)})")
     except Exception as e:
         log(f"[推送] {win_name} 失败: {e!r}")
+
+
+def push_hotkeys() -> None:
+    """把当前快捷键文字推给各页面（页面里的提示文字跟着改键变化）。"""
+    data = hotkey_texts()
+    for name in WINDOWS:
+        push(name, "setHotkeys", data)
 
 
 def entry_dicts(entries: list[Entry], limit: int | None = None) -> list[dict]:
@@ -644,9 +778,55 @@ def hide_float_window() -> None:
         STATE.float_visible = False
 
 
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_ulong), ("rcMonitor", ctypes.wintypes.RECT),
+                ("rcWork", ctypes.wintypes.RECT), ("dwFlags", ctypes.c_ulong)]
+
+
+def work_area_at(x: int, y: int) -> tuple[int, int, int, int]:
+    """坐标所在显示器的工作区（物理像素，不含任务栏）。多显示器时按鼠标所在的那块屏算。"""
+    try:
+        user32.MonitorFromPoint.restype = ctypes.c_void_p
+        user32.MonitorFromPoint.argtypes = [ctypes.wintypes.POINT, ctypes.c_ulong]
+        user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.POINTER(MONITORINFO)]
+        hmon = user32.MonitorFromPoint(ctypes.wintypes.POINT(int(x), int(y)), 2)  # NEAREST
+        mi = MONITORINFO()
+        mi.cbSize = ctypes.sizeof(MONITORINFO)
+        if hmon and user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+            r = mi.rcWork
+            return r.left, r.top, r.right, r.bottom
+    except Exception as e:
+        log(f"[窗口] 取显示器信息失败 {e!r}")
+    return 0, 0, user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+
+
+def cursor_pos() -> tuple[int, int]:
+    pos = ctypes.wintypes.POINT()
+    user32.GetCursorPos(ctypes.byref(pos))
+    return pos.x, pos.y
+
+
+def window_size_px(name: str, default_dip: tuple[int, int]) -> tuple[int, int]:
+    hwnd = user32.FindWindowW(None, WINDOW_TITLES[name])
+    if hwnd:
+        r = ctypes.wintypes.RECT()
+        if user32.GetWindowRect(hwnd, ctypes.byref(r)) and r.right > r.left:
+            return r.right - r.left, r.bottom - r.top
+    return int(default_dip[0] * SCALE), int(default_dip[1] * SCALE)
+
+
+def place_window_px(name: str, x: int, y: int) -> bool:
+    """按物理像素放窗口（不改大小、不抢焦点）。"""
+    hwnd = user32.FindWindowW(None, WINDOW_TITLES[name])
+    if not hwnd:
+        return position_window(name, to_dip(x), to_dip(y), show=True)
+    user32.SetWindowPos(hwnd, 0, int(x), int(y), 0, 0, 0x0001 | 0x0004 | 0x0010 | 0x0040)
+    return True
+
+
 def show_float_near_cursor(word: str, entries: list[Entry],
                            x: int | None = None, y: int | None = None,
-                           push_content: bool = True) -> None:
+                           push_content: bool = True, status: str = "") -> None:
     win = WINDOWS.get("float")
     if win is None:
         return
@@ -655,30 +835,24 @@ def show_float_near_cursor(word: str, entries: list[Entry],
             "word": word,
             "loading": False,
             "entries": entry_dicts(entries),
-            "status": "",
+            "status": status,
         })
     if x is None or y is None:
-        pos = ctypes.wintypes.POINT()
-        user32.GetCursorPos(ctypes.byref(pos))
-        x, y = pos.x, pos.y
+        x, y = cursor_pos()
+    w, h = window_size_px("float", (440, 360))
+    left, top, right, bottom = work_area_at(x, y)
+    gap_x, gap_y = int(18 * SCALE), int(22 * SCALE)
+    px, py = x + gap_x, y + gap_y
+    if px + w > right:
+        px = max(left, x - w - gap_x)
+    if py + h > bottom:
+        py = max(top, y - h - gap_y)
     try:
-        w, h = win.get_current_size()
-    except Exception:
-        w, h = 440, 360
-    sw = to_dip(user32.GetSystemMetrics(0))
-    sh = to_dip(user32.GetSystemMetrics(1))
-    px, py = to_dip(x) + 18, to_dip(y) + 22
-    if px + w > sw:
-        px = max(0, to_dip(x) - w - 12)
-    if py + h > sh:
-        py = max(0, to_dip(y) - h - 12)
-    try:
-        win.move(int(px), int(py))
         win.show()
         round_window("float")
     except Exception as e:
         log(f"[浮窗] 显示失败: {e!r}")
-    position_window("float", px, py, show=True)
+    place_window_px("float", px, py)
     force_redraw("float")
     with STATE.lock:
         STATE.float_visible = True
@@ -689,8 +863,18 @@ def show_float_near_cursor(word: str, entries: list[Entry],
 FOREGROUND_HOLDER = {"hwnd": None}
 
 
+def own_hwnd(hwnd) -> bool:
+    if not hwnd:
+        return False
+    pid = ctypes.c_ulong()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return pid.value == os.getpid()
+
+
 def remember_focus() -> None:
-    FOREGROUND_HOLDER["hwnd"] = user32.GetForegroundWindow()
+    hwnd = user32.GetForegroundWindow()
+    if hwnd and not own_hwnd(hwnd):
+        FOREGROUND_HOLDER["hwnd"] = hwnd
 
 
 def restore_focus() -> None:
@@ -702,53 +886,63 @@ def restore_focus() -> None:
             pass
 
 
-def center_window(win, aspect_y: float = 0.30) -> tuple[int, int]:
-    """把窗口放到屏幕中央（逻辑坐标），返回位置。"""
+def activate_window(name: str) -> None:
+    """把窗口真正切到前台并拿到键盘焦点（查词窗弹出来就能直接打字、按 Esc）。"""
+    hwnd = user32.FindWindowW(None, WINDOW_TITLES[name])
+    if not hwnd:
+        return
     try:
-        w, h = win.get_current_size()
-    except Exception:
-        w, h = 600, 660
-    sw = to_dip(user32.GetSystemMetrics(0))
-    sh = to_dip(user32.GetSystemMetrics(1))
-    x = max(0, (sw - w) // 2)
-    y = max(0, int((sh - h) * aspect_y))
-    return x, y
+        fg = user32.GetForegroundWindow()
+        me = kernel32.GetCurrentThreadId()
+        fg_tid = user32.GetWindowThreadProcessId(fg, None) if fg else 0
+        attached = bool(fg_tid and fg_tid != me and user32.AttachThreadInput(me, fg_tid, True))
+        try:
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+            user32.SetFocus(hwnd)
+        finally:
+            if attached:
+                user32.AttachThreadInput(me, fg_tid, False)
+    except Exception as e:
+        log(f"[窗口] 激活 {name} 失败 {e!r}")
+
+
+def present(name: str, aspect_y: float, default_dip: tuple[int, int]) -> None:
+    """在鼠标所在的显示器上居中显示窗口，并切到前台。"""
+    win = WINDOWS.get(name)
+    if win is None:
+        return
+    remember_focus()
+    cx, cy = cursor_pos()
+    left, top, right, bottom = work_area_at(cx, cy)
+    try:
+        win.show()
+    except Exception as e:
+        log(f"[{name}] 显示失败: {e!r}")
+    w, h = window_size_px(name, default_dip)
+    x = left + max(0, (right - left - w) // 2)
+    y = top + max(0, int((bottom - top - h) * aspect_y))
+    place_window_px(name, x, y)
+    force_redraw(name)
+    round_window(name)
+    activate_window(name)
+    log_window_state(name)
 
 
 def show_lookup(word: str = "") -> None:
-    win = WINDOWS.get("lookup")
-    if win is None:
+    if WINDOWS.get("lookup") is None:
         return
-    try:
-        x, y = center_window(win, 0.22)
-        win.show()                       # 先让它显示出来
-        win.evaluate_js("window.focusSearch && window.focusSearch()")
-        position_window("lookup", x, y, show=True)   # 再定位（否则会被界面库恢复回旧位置）
-        force_redraw("lookup")
-        round_window("lookup")
-        log(f"[查词窗] 已显示于 ({x},{y})")
-    except Exception as e:
-        log(f"[查词窗] 显示失败: {e!r}")
-    log_window_state("lookup")
+    present("lookup", 0.22, (600, 660))
+    push("lookup", "focusSearch", None)
     if word and ENGINE is not None:
-        push("lookup", "renderLookup",
-             {"word": word, "entries": entry_dicts(ENGINE.lookup(word)[:6])})
+        push("lookup", "renderLookup", API.search(word))
 
 
 def show_vocab() -> None:
-    win = WINDOWS.get("vocab")
-    if win is None:
+    if WINDOWS.get("vocab") is None:
         return
     push("vocab", "renderVocab", {"items": load_vocab()})
-    try:
-        x, y = center_window(win, 0.16)
-        win.show()
-        position_window("vocab", x, y, show=True)
-        force_redraw("vocab")
-        round_window("vocab")
-        log("[生词本] 窗口已打开")
-    except Exception as e:
-        log(f"[生词本] 显示失败: {e!r}")
+    present("vocab", 0.16, (760, 780))
 
 
 def settings_payload() -> dict:
@@ -765,6 +959,7 @@ def settings_payload() -> dict:
             "name": d.get("name") or Path(path).stem,
             "count": counts.get(path, 0),
             "ok": bool(counts.get(path)) or Path(path).exists(),
+            "missing": not Path(path).exists(),
         })
     hotkeys = {}
     for action, spec in CONFIG.get("hotkeys", {}).items():
@@ -773,6 +968,11 @@ def settings_payload() -> dict:
         "hotkeys": hotkeys,
         "dictionaries": dicts,
         "auto_capture": bool(CONFIG.get("auto_capture", True)),
+        "capture_modifier": CONFIG.get("capture_modifier", "") or "",
+        "baidu_appid": CONFIG.get("baidu_appid", ""),
+        "baidu_key": CONFIG.get("baidu_key", ""),
+        "data_dir": str(DATA),
+        "ecdict": dict(ECDICT_STATE),
         "capture_only_english": bool(CONFIG.get("capture_only_english", True)),
         "hover_delay_ms": int(CONFIG.get("hover_delay_ms", 600)),
         "online_translate": bool(CONFIG.get("online_translate", True)),
@@ -785,61 +985,36 @@ def settings_payload() -> dict:
 
 
 def show_settings() -> None:
-    win = WINDOWS.get("settings")
-    if win is None:
+    if WINDOWS.get("settings") is None:
         return
     push("settings", "renderSettings", settings_payload())
-    try:
-        x, y = center_window(win, 0.08)
-        win.show()
-        position_window("settings", x, y, show=True)
-        force_redraw("settings")
-        round_window("settings")
-        log("[设置] 窗口已打开")
-    except Exception as e:
-        log(f"[设置] 显示失败: {e!r}")
+    present("settings", 0.08, (780, 820))
 
 
 def show_translate(text: str) -> None:
-    win = WINDOWS.get("translate")
-    if win is None:
+    if WINDOWS.get("translate") is None:
         return
     push("translate", "renderTranslate",
          {"original": text, "loading": True, "translated": None, "words": []})
-    try:
-        x, y = center_window(win, 0.25)
-        win.show()
-        position_window("translate", x, y, show=True)
-        force_redraw("translate")
-        round_window("translate")
-        log(f"[翻译窗] 已显示于 ({x},{y})")
-    except Exception as e:
-        log(f"[翻译窗] 显示失败: {e!r}")
-    log_window_state("translate")
+    present("translate", 0.25, (620, 560))
 
     def worker():
-        translated = None
+        translated, source = None, ""
         if CONFIG.get("online_translate", True):
             translated = translator.translate(text)
+            source = translator.last_source()
         items = []
         if ENGINE is not None:
-            seen = set()
-            for w in re.findall(r"[A-Za-z][A-Za-z']+", text):
-                lw = w.lower()
-                if len(lw) < 2 or lw in seen:
-                    continue
-                seen.add(lw)
-                entries = ENGINE.lookup(lw)[:1]
-                if not entries:
-                    continue
-                brief = plain_text(entries[0].html)[:60]
-                items.append({"word": lw, "brief": brief, "html": ""})
-                if len(items) >= 12:
-                    break
+            def brief(w):
+                e = ENGINE.lookup(w)[:1]
+                return brief_of(e[0], 60) if e else ""
+            items = pick_new_words(text, brief, rank=ENGINE.rank, saved=vocab_words())
         push("translate", "renderTranslate", {
             "original": text,
             "loading": False,
             "translated": translated,
+            "source": source,
+            "online": bool(CONFIG.get("online_translate", True)),
             "words": items,
         })
 
@@ -850,9 +1025,24 @@ def show_translate(text: str) -> None:
 class JsApi:
     def search(self, word: str) -> dict:
         word = (word or "").strip()
-        if not word or ENGINE is None:
+        if not word:
             return {"word": word, "entries": []}
-        return {"word": word, "entries": entry_dicts(ENGINE.lookup(word)[:6])}
+        if ENGINE is None:
+            return {"word": word, "entries": [], "status": "词典还在加载，请稍等几秒"}
+        entries = ENGINE.lookup(word)[:6]
+        out = {"word": word, "entries": entry_dicts(entries)}
+        if not entries:
+            if not ENGINE.books:
+                out["status"] = "还没有可用的词典：托盘右键「设置」里添加词典，或一键下载 ECDICT"
+            elif re.search(r"[A-Za-z]", word):
+                out["did_you_mean"] = ENGINE.fuzzy(word, limit=6)  # 拼写纠错：dictionery→dictionary
+        return out
+
+    def get_hotkeys(self) -> dict:
+        return hotkey_texts()
+
+    def get_accent(self) -> str:
+        return CONFIG.get("accent", "us")
 
     def suggest(self, prefix: str) -> list[str]:
         if ENGINE is None:
@@ -893,7 +1083,7 @@ class JsApi:
             pass
 
     def pick_dictionary(self):
-        """打开文件对话框选一本 .mdx 词典。"""
+        """打开文件对话框选一本词典（.mdx，或 ECDICT 的 .csv / .db）。"""
         win = WINDOWS.get("settings")
         if win is None:
             return {"error": "设置窗口还没准备好"}
@@ -901,14 +1091,15 @@ class JsApi:
             import webview as _wv
             files = win.create_file_dialog(
                 _wv.OPEN_DIALOG, allow_multiple=False,
-                file_types=("MDict 词典 (*.mdx)", "所有文件 (*.*)"))
+                file_types=("词典文件 (*.mdx;*.csv;*.db)", "所有文件 (*.*)"))
             if not files:
                 return None
             path = files[0] if isinstance(files, (list, tuple)) else files
             p = Path(path)
-            if p.suffix.lower() != ".mdx":
-                return {"error": "请选择 .mdx 格式的词典文件"}
-            return {"path": str(p), "name": p.stem, "count": 0, "ok": False}
+            if p.suffix.lower() not in (".mdx", ".csv", ".db"):
+                return {"error": "请选择 .mdx 词典，或 ECDICT 的 ecdict.csv / stardict.db"}
+            name = "ECDICT" if p.suffix.lower() in (".csv", ".db") else p.stem
+            return {"path": str(p), "name": name, "count": 0, "ok": True, "missing": False}
         except Exception as e:
             log(f"[设置] 选词典失败 {e!r}")
             return {"error": f"选择文件失败：{e}"}
@@ -927,11 +1118,18 @@ class JsApi:
                 mods, vk = parse_hotkey(spec or "")
             except Exception:
                 mods, vk = 0, None
-            # parse_hotkey 会带上 MOD_NOREPEAT，这里只看真正的修饰键
-            if not vk or not (mods & (MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_WIN)):
+            # parse_hotkey 会带上 MOD_NOREPEAT，这里只看真正的修饰键；只带 Shift 会吃掉正常打字
+            if not vk or not (mods & (MOD_CONTROL | MOD_ALT | MOD_WIN)):
                 return {"ok": False,
                         "error": f"「{HOTKEY_LABELS.get(action, action)}」的快捷键不合法：至少要 Ctrl / Alt / Win 之一加一个按键"}
-        # 2. 词典校验
+        specs = {}
+        for action, spec in incoming.items():
+            if action in HOTKEY_LABELS and spec:
+                key = "+".join(sorted((spec or "").lower().split("+")))
+                if key in specs:
+                    return {"ok": False, "error": f"「{HOTKEY_LABELS[specs[key]]}」和「{HOTKEY_LABELS[action]}」用了同一个快捷键"}
+                specs[key] = action
+        # 2. 词典：找不到的文件照样保存（列表里标红），不再整体拒绝
         new_dicts = payload.get("dictionaries")
         if new_dicts is not None:
             cleaned, seen = [], set()
@@ -940,12 +1138,8 @@ class JsApi:
                 if not path or path in seen:
                     continue
                 seen.add(path)
-                if not Path(path).exists():
-                    return {"ok": False, "error": f"找不到词典文件：{path}"}
                 cleaned.append({"path": path,
                                 "name": (d or {}).get("name") or Path(path).stem})
-            if not cleaned:
-                return {"ok": False, "error": "至少要保留一本词典"}
             new_dicts = cleaned
 
         old_hotkeys = dict(CONFIG.get("hotkeys", {}))
@@ -966,19 +1160,34 @@ class JsApi:
                 pass
         if payload.get("accent") in ("us", "uk"):
             CONFIG["accent"] = payload["accent"]
+        if "capture_modifier" in payload and payload["capture_modifier"] in ("", *CAPTURE_MODIFIERS):
+            CONFIG["capture_modifier"] = payload["capture_modifier"]
+        for key in ("baidu_appid", "baidu_key"):
+            if key in payload:
+                CONFIG[key] = str(payload[key] or "").strip()
+        translator.configure(CONFIG.get("baidu_appid", ""), CONFIG.get("baidu_key", ""))
+        if payload.get("autostart") is not None:
+            CONFIG["autostart"] = bool(payload["autostart"])
+            set_autostart(CONFIG["autostart"])
         save_config()
 
         STATE.auto_capture = bool(CONFIG.get("auto_capture", True))
-        if payload.get("autostart") is not None:
-            set_autostart(bool(payload["autostart"]))
+        if TRAY_ICON is not None:
+            try:
+                TRAY_ICON.update_menu()
+            except Exception:
+                pass
 
         notes = []
         if CONFIG.get("hotkeys", {}) != old_hotkeys:
             reload_hotkeys_async()
+            push_hotkeys()
             notes.append("快捷键已换")
         if CONFIG.get("dictionaries", []) != old_dicts:
             threading.Thread(target=reload_engine, daemon=True).start()
             notes.append("词典在后台重新加载（约几秒）")
+            if not CONFIG.get("dictionaries"):
+                notes.append("现在一本词典都没有，取词会查不到释义")
         if CONFIG.get("hide_tray_icon"):
             notes.append("隐藏托盘图标要重启程序才生效")
         msg = "已保存：" + ("；".join(notes) if notes else "设置已更新")
@@ -991,11 +1200,16 @@ class JsApi:
         win = WINDOWS.get(which)
         if win is None:
             return
+        hwnd = user32.FindWindowW(None, WINDOW_TITLES[which])
+        was_active = bool(hwnd) and user32.GetForegroundWindow() == hwnd
         position_window(which, OFFSCREEN[0], OFFSCREEN[1], show=True)
         if which == "float":
             with STATE.lock:
                 STATE.float_visible = False
                 STATE.float_pinned = False
+        elif was_active:
+            # 窗口只是挪到屏幕外，焦点不还回去的话，接下来打的字会进这个看不见的窗口
+            restore_focus()
 
     def poll_hover(self):
         """界面每 120 毫秒调一次：在主线程执行取词和待办任务。"""
@@ -1027,7 +1241,7 @@ class JsApi:
             log(f"[取词] 识别到: {res['word']}")
             show_float_near_cursor(res["word"], res["entries"],
                                    res["x"], res["y"], push_content=False)
-            return {"word": res["word"], "loading": False, "status": "",
+            return {"word": res["word"], "loading": False, "status": res.get("note", ""),
                     "pinned": STATE.float_pinned,
                     "entries": entry_dicts(res["entries"], limit=700)}
         if task:
@@ -1061,18 +1275,21 @@ class JsApi:
                 if STATE.float_visible and STATE.float_word == word:
                     return
             entries = ENGINE.lookup(word)[:1]
-            if not entries and re.search(r"[A-Za-z]", word):
-                # 识别可能有偏差：先试前缀候选，再试拼写最近(编辑距离)的词
-                for cand in list(ENGINE.suggest(word[:4], 3)) + ENGINE.fuzzy(word):
+            note = ""
+            if not entries and len(word) >= 5 and re.fullmatch(r"[A-Za-z'’-]+", word):
+                # 识别偶尔认错一个字母（l/I、rn/m）：只接受编辑距离为 1 的纠正，
+                # 以前用前 4 个字母的前缀去猜，人名、术语会弹出不相干的词
+                for cand in ENGINE.fuzzy(word, limit=3, max_dist=1):
                     entries = ENGINE.lookup(cand)[:1]
                     if entries:
+                        note = f"识别为「{word}」，按「{cand}」显示"
+                        log(f"[取词] {note}")
                         word = cand
-                        log(f"[取词] 按「{cand}」纠正后命中")
                         break
             if not entries:
                 return
             with STATE.lock:
-                STATE.result = {"word": word, "entries": entries, "x": x, "y": y}
+                STATE.result = {"word": word, "entries": entries, "x": x, "y": y, "note": note}
         finally:
             with STATE.lock:
                 STATE.capture_busy = False
@@ -1092,33 +1309,32 @@ class JsApi:
                     text = CAPTURE.selection()
             except Exception as e:
                 log(f"[翻译] 读选区失败: {e!r}")
-            if not text:  # 选区接口读不到时，模拟一次复制再读剪贴板
-                before = get_clipboard_text() or ""
-                copy_selection()
-                time.sleep(0.18)
-                after = get_clipboard_text() or ""
-                if after and after != before:
-                    text = after
+            if not text:  # 选区接口读不到时，模拟一次复制再读剪贴板（读完恢复原剪贴板）
+                text = copy_selection_text()
             if text:
                 show_translate(text.strip()[:2000])
             else:
-                log("[翻译] 没读到选中内容")
+                notify(f"没读到选中的文字：先用鼠标选中一段文字，再按 {hotkey_text('translate')}",
+                       key="no-selection")
         elif task == "capture":
-            pos = ctypes.wintypes.POINT()
-            user32.GetCursorPos(ctypes.byref(pos))
+            x, y = cursor_pos()
             word = None
             try:
                 if CAPTURE is not None:
-                    word = CAPTURE.word_at(pos.x, pos.y)
+                    word = CAPTURE.word_at(x, y)
             except Exception as e:
                 log(f"[取词] 手动取词失败: {e!r}")
             if not word or not re.search(r"[A-Za-z\u4e00-\u9fff]", word):
-                log("[取词] 鼠标下没有文字")
+                notify("鼠标下没认出文字：把鼠标移到单词正上方再试", key="no-word")
                 return
-            remember_focus()
-            entries = ENGINE.lookup(word.strip())[:4] if ENGINE else []
-            if entries:
-                show_float_near_cursor(word.strip(), entries, pos.x, pos.y)
+            word = word.strip()
+            if ENGINE is None:
+                notify("词典还在加载，请稍等几秒", key="engine-loading")
+                return
+            entries = ENGINE.lookup(word)[:4]
+            # 手动取词查不到也弹浮窗告诉用户，不再悄无声息
+            show_float_near_cursor(word, entries, x, y,
+                                   status="" if entries else "词典里没有")
         elif task == "add_vocab":
             word = None
             with STATE.lock:
@@ -1133,9 +1349,13 @@ class JsApi:
                 except Exception as e:
                     log(f"[生词本] 取词失败 {e!r}")
             if word and ENGLISH_RE.search(word):
-                add_vocab(word.strip())
+                word = word.strip()
+                if add_vocab(word):
+                    notify(f"已收进生词本：{word}", key="vocab")
+                else:
+                    notify(f"生词本里已经有「{word}」了", key="vocab")
             else:
-                log("[生词本] 鼠标下没有英文词")
+                notify("鼠标下没有英文单词，没收藏", key="vocab")
 
     def open_lookup(self, word: str = "") -> None:
         self.close_window("float")
@@ -1157,11 +1377,91 @@ class JsApi:
     def export_vocab(self) -> str:
         return export_vocab()
 
-    def speak_word(self, word: str, accent: str = "us") -> bool:
-        return speak(word, accent)
+    def export_anki(self) -> str:
+        return export_anki()
+
+    def clear_vocab(self) -> int:
+        n = len(load_vocab())
+        save_vocab([])
+        log(f"[生词本] 已清空（{n} 个）")
+        return n
+
+    def open_folder(self, which: str = "export") -> bool:
+        path = {"export": EXPORT_DIR, "data": DATA}.get(which, DATA)
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(path))
+            return True
+        except Exception as e:
+            log(f"[打开目录] 失败 {e!r}")
+            return False
+
+    def speak_word(self, word: str, accent: str = "") -> bool:
+        return speak(word, accent or CONFIG.get("accent", "us"))
+
+    def download_ecdict(self) -> dict:
+        if ECDICT_STATE["running"]:
+            return {"ok": False, "error": "已经在下载了"}
+        threading.Thread(target=download_ecdict, daemon=True).start()
+        return {"ok": True}
 
 
 API = JsApi()
+
+
+# ---------------- 下载 ECDICT ----------------
+ECDICT_STATE = {"running": False, "pct": 0, "msg": ""}
+
+
+def _ecdict_progress(pct: int, msg: str, done: bool = False, ok: bool = True) -> None:
+    ECDICT_STATE.update(pct=pct, msg=msg)
+    push("settings", "ecdictProgress", {"pct": pct, "msg": msg, "done": done, "ok": ok})
+
+
+def download_ecdict() -> None:
+    """下载开源词库 ECDICT（约 63MB，MIT 许可），完成后自动加进词典列表。"""
+    ECDICT_STATE["running"] = True
+    target = DICT_DIR / "ecdict.csv"
+    part = target.with_suffix(".csv.part")
+    try:
+        DICT_DIR.mkdir(parents=True, exist_ok=True)
+        if not target.exists():
+            _ecdict_progress(0, "正在连接 GitHub…")
+            with requests.get(ECDICT_URL, stream=True, timeout=(10, 30)) as r:
+                r.raise_for_status()
+                total = int(r.headers.get("Content-Length") or 0)
+                got, last = 0, 0.0
+                with open(part, "wb") as f:
+                    for chunk in r.iter_content(256 * 1024):
+                        f.write(chunk)
+                        got += len(chunk)
+                        if time.time() - last > 0.5:
+                            last = time.time()
+                            pct = min(99, int(got * 100 / total)) if total else 0
+                            _ecdict_progress(pct, f"已下载 {got / 1048576:.1f} MB"
+                                             + (f" / {total / 1048576:.0f} MB" if total else ""))
+            part.replace(target)
+        _ecdict_progress(100, "下载完成，正在建立索引（第一次约半分钟）…")
+        dicts = CONFIG.setdefault("dictionaries", [])
+        if not any(Path(d.get("path", "")) == target for d in dicts):
+            dicts.append({"path": str(target), "name": "ECDICT"})
+            save_config()
+        reload_engine()
+        ok = ENGINE is not None and any(Path(b.path) == target for b in ENGINE.books)
+        msg = "ECDICT 已就绪" if ok else "ECDICT 加载失败，详见日志"
+        _ecdict_progress(100, msg, done=True, ok=ok)
+        push("settings", "renderSettings", settings_payload())
+        notify(msg)
+    except Exception as e:
+        log(f"[ECDICT] 下载失败 {e!r}")
+        try:
+            part.unlink()
+        except Exception:
+            pass
+        _ecdict_progress(0, "下载失败：连不上 GitHub。可以手动下载 ecdict.csv 后用「添加词典文件」选它",
+                         done=True, ok=False)
+    finally:
+        ECDICT_STATE["running"] = False
 
 
 # ---------------- 热键 ----------------
@@ -1187,6 +1487,7 @@ def hotkey_thread():
                     reg[idx] = action
 
         register_all()
+        threading.Timer(3.0, report_hotkey_failures).start()  # 等托盘图标出来再提示
         MSG = ctypes.wintypes.MSG()
         while not STATE.quit:
             r = user32.GetMessageW(ctypes.byref(MSG), None, 0, 0)
@@ -1197,8 +1498,17 @@ def hotkey_thread():
             elif MSG.message == WM_APP_RELOAD_HOTKEYS:
                 log("[热键] 配置有变，重新注册")
                 register_all()
+                report_hotkey_failures()
     except Exception as e:
         log(f"[热键线程异常] {e!r}")
+
+
+def report_hotkey_failures() -> None:
+    bad = [f"{HOTKEY_LABELS.get(a, a)}（{hotkey_text(a)}）"
+           for a, ok in STATE.hotkey_status.items() if not ok]
+    if bad:
+        notify("这些快捷键被别的软件占用了：" + "、".join(bad) + "。可在托盘右键「设置」里换一个",
+               key="hotkey-fail", interval=1)
 
 
 def reload_hotkeys_async() -> None:
@@ -1210,15 +1520,25 @@ def reload_hotkeys_async() -> None:
         log(f"[热键] 重载通知失败 {e!r}")
 
 
+def build_engine() -> DictEngine:
+    books = [(d["path"], d.get("name")) for d in CONFIG.get("dictionaries", [])]
+    engine = DictEngine(books, cache_dir=INDEX_DIR)
+    names = "、".join(f"{b.name}（{len(b):,} 条）" for b in engine.books)
+    log(f"[词典就绪] {names or '没有可用的词典'}")
+    if engine.errors:
+        for name, why in engine.errors:
+            log(f"[词典加载失败] {name}: {why}")
+        notify("有词典没加载上：" + "、".join(f"{n}（{w if w == '找不到文件' else '文件读不了'}）"
+                                         for n, w in engine.errors), key="dict-fail", interval=1)
+    return engine
+
+
 def reload_engine() -> None:
     """按当前配置重新加载词典（设置里换过词典后调用）。"""
     global ENGINE
     try:
-        books = [(d["path"], d.get("name")) for d in CONFIG["dictionaries"]]
-        log(f"[词典] 重新加载 {len(books)} 本…")
-        ENGINE = DictEngine(books)
-        names = "、".join(f"{b.name}（{len(b):,} 条）" for b in ENGINE.books)
-        log(f"[词典] 重新加载完成: {names}")
+        log("[词典] 重新加载…")
+        ENGINE = build_engine()
     except Exception as e:
         log(f"[词典] 重新加载失败 {e!r}")
 
@@ -1239,6 +1559,8 @@ def on_hotkey(action: str):
     elif action == "quit":
         log("[退出] 收到退出快捷键")
         STATE.quit = True
+        if CAPTURE is not None:
+            CAPTURE.close()
         os._exit(0)
     elif action == "toggle_auto":
         toggle_auto()
@@ -1297,7 +1619,7 @@ def detach_from_taskbar(name: str) -> bool:
             user32.SetWindowLongPtrW(hwnd, -8, ctypes.c_void_p(host))  # GWLP_HWNDPARENT
         ex = int(user32.GetWindowLongPtrW(hwnd, -20) or 0)
         # 关键：清掉「应用窗口」标志（WinForms 默认会加，它优先于工具窗口，导致任务栏照显示）
-        ex = (ex | 0x00000080 | 0x08000000) & ~0x00040000
+        ex = (ex | 0x00000080 | no_activate_flag(name)) & ~0x00040000
         user32.SetWindowLongPtrW(hwnd, -20, ctypes.c_void_p(ex))
         delete_taskbar_tab(hwnd)
         return True
@@ -1350,8 +1672,13 @@ def delete_taskbar_tab(hwnd: int) -> bool:
         return False
 
 
+def no_activate_flag(name: str) -> int:
+    """只有取词浮窗不抢焦点；查词/翻译/设置窗要能打字，加了「不激活」就收不到键盘输入。"""
+    return 0x08000000 if name == "float" else 0
+
+
 def make_tool_window(name: str) -> bool:
-    """让窗口成为「工具窗口」：不出现在任务栏、不进 Alt+Tab、不抢焦点。"""
+    """让窗口成为「工具窗口」：不出现在任务栏、不进 Alt+Tab；浮窗另外不抢焦点。"""
     hwnd = user32.FindWindowW(None, WINDOW_TITLES[name])
     if not hwnd:
         return False
@@ -1363,9 +1690,11 @@ def make_tool_window(name: str) -> bool:
         user32.GetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int]
         user32.SetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
         ex = int(user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE) or 0)
-        if not (ex & WS_EX_TOOLWINDOW) or (ex & 0x00040000):
-            ex = (ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & ~0x00040000
-            user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ctypes.c_void_p(ex))
+        want = (ex | WS_EX_TOOLWINDOW | no_activate_flag(name)) & ~0x00040000
+        if name != "float":
+            want &= ~WS_EX_NOACTIVATE  # 旧版本给所有窗口都加过，这里清掉
+        if want != ex:
+            user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ctypes.c_void_p(want))
         # 通知系统刷新窗口框架，任务栏立刻撤掉图标
         user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
                             0x0001 | 0x0002 | 0x0004 | 0x0020)  # NOSIZE|NOMOVE|NOZORDER|FRAMECHANGED
@@ -1373,6 +1702,9 @@ def make_tool_window(name: str) -> bool:
     except Exception as e:
         log(f"[窗口] 设置工具窗口失败 {name}: {e!r}")
         return False
+
+
+WINDOWS_READY = threading.Event()
 
 
 def init_windows():
@@ -1395,7 +1727,9 @@ def init_windows():
             round_window(name)
         except Exception as e:
             log(f"[窗口] {name} 就位失败: {e!r}")
-    log("[窗口] 四个窗口就位（屏幕外待命，已从任务栏摘除）")
+    log("[窗口] 五个窗口就位（屏幕外待命，已从任务栏摘除）")
+    push_hotkeys()
+    WINDOWS_READY.set()
 
 
 def toggle_auto():
@@ -1422,12 +1756,16 @@ def own_window_at(x: int, y: int) -> bool:
         return False
 
 
+FLOAT_HIDE_SECONDS = 1.2   # 鼠标离开单词和浮窗多久后收起（以前 3.5 秒，挡着视线太久）
+MODIFIER_DELAY = 0.15      # 按住取词键时，鼠标停多久就取词
+
+
 def hover_thread():
     last_pos = None
     idle_since = time.time()
     hide_stamp = 0.0
     while not STATE.quit:
-        time.sleep(0.12)
+        time.sleep(0.06 if CONFIG.get("capture_modifier") else 0.12)
         pos = ctypes.wintypes.POINT()
         user32.GetCursorPos(ctypes.byref(pos))
         cur = (pos.x, pos.y)
@@ -1437,14 +1775,14 @@ def hover_thread():
             pinned = STATE.float_pinned
             word_xy = STATE.float_xy
         if visible and not pinned:
-            near_word = bool(
-                word_xy and abs(pos.x - word_xy[0]) <= 110 and abs(pos.y - word_xy[1]) <= 80)
+            near_word = bool(word_xy and abs(pos.x - word_xy[0]) <= 110 * SCALE
+                             and abs(pos.y - word_xy[1]) <= 80 * SCALE)
             if mouse_in_float() or near_word:
                 hide_stamp = 0.0  # 鼠标在浮窗上或还停在取的那个词上：不收起
             else:
                 if hide_stamp == 0.0:
                     hide_stamp = time.time()
-                elif time.time() - hide_stamp > 3.5:
+                elif time.time() - hide_stamp > FLOAT_HIDE_SECONDS:
                     API.close_window("float")
                     hide_stamp = 0.0
 
@@ -1453,11 +1791,25 @@ def hover_thread():
                 last_pos = cur
                 continue
 
+        # 「按住 Ctrl/Shift/Alt 才取词」模式：没按着就不取，阅读时鼠标随便停也不会弹窗
+        vk = CAPTURE_MODIFIERS.get(CONFIG.get("capture_modifier") or "")
+        if vk is not None:
+            # 只认「单独按住」这个键：按快捷键组合（如 Ctrl+Alt+T）时不顺带取词
+            others = [k for k in (0x10, 0x11, 0x12, 0x5B, 0x5C) if k != vk]
+            if not (user32.GetAsyncKeyState(vk) & 0x8000) or any(
+                    user32.GetAsyncKeyState(k) & 0x8000 for k in others):
+                last_pos = cur
+                idle_since = time.time() - 10  # 一按下就能立刻取词
+                continue
+            delay = MODIFIER_DELAY
+        else:
+            delay = CONFIG.get("hover_delay_ms", 600) / 1000.0
+
         if cur != last_pos:
             last_pos = cur
             idle_since = time.time()
             continue
-        if time.time() - idle_since < CONFIG.get("hover_delay_ms", 600) / 1000.0:
+        if time.time() - idle_since < delay:
             continue
         idle_since = time.time() + 2.0
 
@@ -1473,7 +1825,8 @@ def hover_thread():
 
 # ---------------- 自检 ----------------
 def self_check() -> str:
-    lines = ["暖词自检报告", f"时间: {time.strftime('%Y-%m-%d %H:%M:%S')}", ""]
+    lines = ["暖词自检报告", f"时间: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+             f"数据目录: {DATA}", ""]
     if ENGINE is None:
         lines.append("词典: 还没加载完")
     else:
@@ -1481,6 +1834,8 @@ def self_check() -> str:
         lines.append(f"词典: {len(ENGINE.books)} 本，共 {total:,} 条")
         for b in ENGINE.books:
             lines.append(f"  · {b.name}: {len(b):,} 条")
+        for name, why in ENGINE.errors:
+            lines.append(f"  × {name}: {why}")
         t0 = time.time()
         hit = ENGINE.lookup("test")
         lines.append(f"查询测试: test -> {len(hit)} 条，{(time.time()-t0)*1000:.0f} 毫秒")
@@ -1493,28 +1848,34 @@ def self_check() -> str:
     else:
         lines.append("热键: 还没注册")
     lines.append("")
-    lines.append(f"自动取词: {'开' if STATE.auto_capture else '关'}")
-    lines.append(f"开机自启: {'开' if autostart_enabled() else '关'}")
+    mod = CONFIG.get("capture_modifier") or ""
+    lines.append(f"自动取词: {'开' if STATE.auto_capture else '关'}"
+                 + (f"（按住 {mod.capitalize()} 取词）" if mod else "（停住即取词）"))
+    lines.append(f"开机自启: {'开' if autostart_enabled() else '关'}"
+                 + ("" if autostart_value() in (None, autostart_command()) else "（路径过期，重启程序会修正）"))
     t0 = time.time()
     ok_voice = speak("test", "us")
     lines.append(f"发音: {'正常' if ok_voice else '不可用'} ({(time.time()-t0):.1f} 秒)")
     t0 = time.time()
     tr = translator.translate("This is a self check.")
-    lines.append(f"联网翻译: {'正常' if tr else '不可用'} ({(time.time()-t0):.1f} 秒)")
+    lines.append(f"联网翻译: {'正常（' + translator.last_source() + '）' if tr else '不可用'} "
+                 f"({(time.time()-t0):.1f} 秒)")
     lines.append("")
     lines.append(f"日志文件: {LOG_FILE}")
     report = "\n".join(lines)
     try:
-        (BASE / "自检报告.txt").write_text(report, encoding="utf-8")
+        path = DATA / "自检报告.txt"
+        path.write_text(report, encoding="utf-8")
+        os.startfile(str(path))
     except Exception:
         pass
     log("[自检]\n" + report)
     return report
 
 
-# ---------------- 触发文件 ----------------
+# ---------------- 触发文件（调试用，配置里 debug=true 才开） ----------------
 def trigger_file_thread():
-    path = BASE / "触发.txt"
+    path = DATA / "触发.txt"
     while not STATE.quit:
         time.sleep(0.3)
         if not path.exists():
@@ -1540,7 +1901,7 @@ def trigger_file_thread():
                     out.append(f"=== {name} ===\n{val}")
                 except Exception as e:
                     out.append(f"=== {name} === <{e!r}>")
-            (BASE / "测试_窗口内容.txt").write_text("\n".join(out), encoding="utf-8")
+            (DATA / "测试_窗口内容.txt").write_text("\n".join(out), encoding="utf-8")
         elif action == "selfcheck":
             self_check()
         elif action == "speak":
@@ -1577,7 +1938,7 @@ def trigger_file_thread():
                     out["result"] = CAPTURE.probe_at(x, y) if CAPTURE else "无取词服务"
                 except Exception as e:
                     out["error"] = repr(e)
-            (BASE / "探测结果.txt").write_text(
+            (DATA / "探测结果.txt").write_text(
                 json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
         elif action in ("lookup", "translate", "capture", "toggle_auto"):
             on_hotkey(action)
@@ -1611,7 +1972,7 @@ def tray_thread():
 
     # 允许完全隐藏托盘图标（此时用 Ctrl+Alt+Q 退出程序）
     if CONFIG.get("hide_tray_icon"):
-        log("[托盘] 配置为隐藏托盘图标；退出请按 Ctrl+Alt+Q")
+        log(f"[托盘] 配置为隐藏托盘图标；退出请按 {hotkey_text('quit')}")
         return
 
     def on_settings(icon, item):
@@ -1634,7 +1995,7 @@ def tray_thread():
     def on_hide_tray(icon, item):
         CONFIG["hide_tray_icon"] = True
         save_config()
-        log("[托盘] 已隐藏托盘图标（退出按 Ctrl+Alt+Q，想恢复把 config.json 里 hide_tray_icon 改 false）")
+        log(f"[托盘] 已隐藏托盘图标（退出按 {hotkey_text('quit')}，想恢复把 config.json 里 hide_tray_icon 改 false）")
         try:
             icon.stop()
         except Exception:
@@ -1644,9 +2005,9 @@ def tray_thread():
         """真正重启：新进程带 --force 跳过单实例检查，然后自己退出。"""
         import subprocess
         log("[重启] 托盘请求重启程序")
+        cmd = [sys.executable] if FROZEN else [sys.executable, str(BASE / "app.py")]
         try:
-            subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--force"],
-                             cwd=str(BASE), creationflags=0x00000008)
+            subprocess.Popen(cmd + ["--force"], cwd=str(BASE), creationflags=0x00000008)
         except Exception as e:
             log(f"[重启] 拉起新进程失败 {e!r}")
         time.sleep(0.8)
@@ -1656,7 +2017,7 @@ def tray_thread():
         toggle_auto()
 
     def on_autostart(icon, item):
-        set_autostart(not autostart_enabled())
+        change_autostart(not autostart_enabled())
         try:
             icon.update_menu()
         except Exception:
@@ -1667,27 +2028,33 @@ def tray_thread():
 
     def on_quit(icon, item):
         STATE.quit = True
+        if CAPTURE is not None:
+            CAPTURE.close()
         try:
             icon.stop()
         except Exception:
             pass
         os._exit(0)
 
+    def label(text, action):
+        # 菜单文字按当前快捷键动态生成，改键后不用重启
+        return lambda item: f"{text} ({hotkey_text(action)})"
+
     menu = pystray.Menu(
         Item("设置（快捷键 / 词典 / 取词）", on_settings),
         pystray.Menu.SEPARATOR,
-        Item("快捷查词 (Ctrl+Alt+D)", on_lookup, default=True),
-        Item("翻译选中内容 (Ctrl+Alt+T)", on_translate),
-        Item("鼠标处取词 (Ctrl+Alt+A)", on_capture),
+        Item(label("快捷查词", "lookup"), on_lookup, default=True),
+        Item(label("翻译选中内容", "translate"), on_translate),
+        Item(label("鼠标处取词", "capture"), on_capture),
         pystray.Menu.SEPARATOR,
-        Item("生词本 (收藏用 Ctrl+Shift+A)", on_vocab),
+        Item(label("生词本 · 收藏用", "add_vocab"), on_vocab),
         pystray.Menu.SEPARATOR,
-        Item("鼠标自动取词 (Ctrl+Alt+S)", on_toggle, checked=lambda item: STATE.auto_capture),
+        Item(label("鼠标自动取词", "toggle_auto"), on_toggle, checked=lambda item: STATE.auto_capture),
         Item("开机自启", on_autostart, checked=lambda item: autostart_enabled()),
         pystray.Menu.SEPARATOR,
         Item("自检（生成报告）", on_selfcheck),
         Item("重启程序（改配置/更新后用）", on_restart),
-        Item("隐藏托盘图标（退出用 Ctrl+Alt+Q）", on_hide_tray),
+        Item(label("隐藏托盘图标 · 退出用", "quit"), on_hide_tray),
         Item("退出", on_quit),
     )
     TRAY_ICON = pystray.Icon("warmword", make_tray_icon(), "暖词 · 取词助手", menu)
@@ -1697,10 +2064,17 @@ def tray_thread():
 # ---------------- 启动 ----------------
 def engine_thread():
     global ENGINE
-    books = [(d["path"], d.get("name")) for d in CONFIG["dictionaries"]]
-    ENGINE = DictEngine(books)
-    names = "、".join(f"{b.name}（{len(b):,} 条）" for b in ENGINE.books)
-    log(f"[词典就绪] {names}")
+    try:
+        ENGINE = build_engine()
+    except Exception as e:
+        log(f"[词典] 加载失败 {e!r}")
+        ENGINE = DictEngine([])
+    if not ENGINE.books:
+        # 第一次用（或词典全都找不到）：直接打开设置，告诉用户下一步做什么
+        WINDOWS_READY.wait(30)
+        time.sleep(1.0)
+        notify("还没有可用的词典：在设置里添加 .mdx 词典，或点「下载开源词库 ECDICT」", key="no-dict")
+        show_settings()
 
 
 def main():
@@ -1723,8 +2097,10 @@ def main():
     log(f"[显示] 屏幕 {user32.GetSystemMetrics(0)}x{user32.GetSystemMetrics(1)}，"
         f"缩放 {SCALE}，DPI 感知级别 {_aware.value}")
 
+    migrate_old_data(log)
     CONFIG = load_config()
     STATE.auto_capture = bool(CONFIG.get("auto_capture", True))
+    translator.configure(CONFIG.get("baidu_appid", ""), CONFIG.get("baidu_key", ""))
 
     force = "--force" in sys.argv or "--restart" in sys.argv
     if force:
@@ -1733,31 +2109,32 @@ def main():
             time.sleep(2.5)
     elif not single_instance():
         log("[启动] 已有实例在跑，唤出查词窗后退出")
-        try:
-            (BASE / "触发.txt").write_text("lookup", encoding="utf-8")
-        except Exception:
-            pass
+        user32.AllowSetForegroundWindow(-1)  # ASFW_ANY：让旧实例能把查词窗切到前台
+        signal_event(SHOW_EVENT)
         return
 
     log("=" * 40)
-    log("[启动] 暖词取词助手")
+    log(f"[启动] 暖词取词助手（数据目录 {DATA}{'，便携模式' if PORTABLE else ''}）")
 
     threading.Thread(target=engine_thread, daemon=True).start()
     threading.Thread(target=hotkey_thread, daemon=True).start()
     threading.Thread(target=hover_thread, daemon=True).start()
-    threading.Thread(target=trigger_file_thread, daemon=True).start()
     threading.Thread(target=tray_thread, daemon=True).start()
     threading.Thread(target=quit_watcher, daemon=True).start()
+    threading.Thread(target=show_watcher, daemon=True).start()
+    if CONFIG.get("debug") or os.environ.get("WARMWORD_DEBUG"):
+        log(f"[调试] 已开启触发文件 {DATA / '触发.txt'}")
+        threading.Thread(target=trigger_file_thread, daemon=True).start()
 
     ensure_autostart()
     CAPTURE = CaptureClient()  # 取词交给独立小进程（文字接口只能在进程主线程用）
 
-    float_html = (BASE / "ui" / "float.html").read_text(encoding="utf-8")
-    lookup_html = (BASE / "ui" / "lookup.html").read_text(encoding="utf-8")
-    translate_html = (BASE / "ui" / "translate.html").read_text(encoding="utf-8")
-
-    vocab_html = (BASE / "ui" / "vocab.html").read_text(encoding="utf-8")
-    settings_html = (BASE / "ui" / "settings.html").read_text(encoding="utf-8")
+    ui = RES / "ui"
+    float_html = (ui / "float.html").read_text(encoding="utf-8")
+    lookup_html = (ui / "lookup.html").read_text(encoding="utf-8")
+    translate_html = (ui / "translate.html").read_text(encoding="utf-8")
+    vocab_html = (ui / "vocab.html").read_text(encoding="utf-8")
+    settings_html = (ui / "settings.html").read_text(encoding="utf-8")
 
     WINDOWS["float"] = webview.create_window(
         WINDOW_TITLES["float"], html=float_html, js_api=API,
@@ -1790,11 +2167,7 @@ def main():
     def _close_to_tray(name):
         def handler():
             try:
-                position_window(name, OFFSCREEN[0], OFFSCREEN[1], show=True)
-                if name == "float":
-                    with STATE.lock:
-                        STATE.float_visible = False
-                        STATE.float_pinned = False
+                API.close_window(name)
                 log(f"[窗口] 关闭 {name} → 收起（程序仍在托盘）")
             except Exception as e:
                 log(f"[窗口] 收起 {name} 失败 {e!r}")
