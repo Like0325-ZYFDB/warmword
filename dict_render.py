@@ -141,6 +141,8 @@ class Resources:
 _URL_RE = re.compile(r"""url\(\s*(['"]?)([^'")]+)\1\s*\)""", re.I)
 _IMPORT_RE = re.compile(r"""@import\s+(?:url\()?\s*['"]?([^'")\s;]+)['"]?\s*\)?[^;]*;""", re.I)
 _SELECTOR_RE = re.compile(r"([^{}]+)\{")
+# 只在选择器位置把 html/body 换成词条根节点：一次性全局替换，比逐段回调快两个数量级
+_ROOT_RE = re.compile(r"(?<![\w.#-])(html|body)(?![\w-])(?=[^{}]*\{)", re.I)
 
 
 def rewrite_css(text: str, res: Resources | None, base: str = "", depth: int = 0) -> str:
@@ -148,6 +150,11 @@ def rewrite_css(text: str, res: Resources | None, base: str = "", depth: int = 0
         text = _IMPORT_RE.sub(lambda m: res.css(m.group(1), depth + 1)
                               if not m.group(1).startswith("http") else "", text)
 
+    # 先改选择器（此时文本还是原始 CSS，几十 KB 量级），再内联 url()。
+    # 顺序反过来的话，内联出几 MB 的 base64 后还要跑一遍选择器正则，首次渲染会卡几分钟。
+    text = _ROOT_RE.sub(".ww-root", text)
+
+    if res is not None and depth < 3:
         def url(m):
             ref = m.group(2).strip()
             if ref.startswith(("data:", "http:", "https:", "#")):
@@ -155,14 +162,7 @@ def rewrite_css(text: str, res: Resources | None, base: str = "", depth: int = 0
             uri = res.data_uri(ref, base)
             return f'url("{uri}")' if uri else "url()"
         text = _URL_RE.sub(url, text)
-
-    # 词条放在 Shadow DOM 里，没有 html/body：把这两个选择器换成词条根节点
-    def selector(m):
-        sel = m.group(1)
-        if sel.lstrip().startswith("@"):
-            return m.group(0)
-        return re.sub(r"(?<![\w.#-])(html|body)(?![\w-])", ".ww-root", sel, flags=re.I) + "{"
-    return _SELECTOR_RE.sub(selector, text)
+    return text
 
 
 # ---------------- HTML 改写 ----------------

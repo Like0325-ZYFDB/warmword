@@ -741,6 +741,8 @@ def push_hotkeys() -> None:
     """把当前快捷键文字推给各页面（页面里的提示文字跟着改键变化）。"""
     data = hotkey_texts()
     for name in WINDOWS:
+        if name == "settings":
+            continue  # 设置页自己按 get_settings 的数据渲染，没有 setHotkeys，推了只会报 ReferenceError
         push(name, "setHotkeys", data)
 
 
