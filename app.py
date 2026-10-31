@@ -49,10 +49,12 @@ import requests  # noqa: E402
 import webview  # noqa: E402
 
 from dict_engine import DictEngine, Entry  # noqa: E402
+from dict_render import clean_ref, rewrite_html  # noqa: E402
 from capture_client import CaptureClient  # noqa: E402
 from text_capture import set_clipboard_text, copy_selection_text  # noqa: E402
 import translate as translator  # noqa: E402
 from wordlist import pick_new_words  # noqa: E402
+from tts import SapiSpeaker  # noqa: E402
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -75,6 +77,7 @@ HOTKEY_LABELS = {
     "quit": "退出程序",
 }
 VOCAB_PATH = DATA / "生词本.json"
+HISTORY_PATH = DATA / "查词历史.json"
 DICT_DIR = DATA / "词库"            # 下载的 ECDICT 放这里
 INDEX_DIR = DATA / "cache" / "index"  # ECDICT csv 转出来的 sqlite 索引
 ECDICT_URL = "https://raw.githubusercontent.com/skywind3000/ECDICT/master/ecdict.csv"
@@ -178,6 +181,9 @@ DEFAULT_CONFIG = {
     "autostart": True,
     "hide_tray_icon": False,
     "accent": "us",
+    "render_mode": "rich",           # rich=词典原版排版（带样式、图片、发音）；simple=简洁文字
+    "font_scale": 1.0,               # 释义字号倍数
+    "auto_speak": False,             # 取词弹窗时自动读出单词
     "debug": False,
 }
 CAPTURE_MODIFIERS = {"ctrl": 0x11, "shift": 0x10, "alt": 0x12}
@@ -242,6 +248,27 @@ def remove_vocab(word: str) -> bool:
     save_vocab(left)
     log(f"[生词本] 已移除 {word}（剩 {len(left)} 个）")
     return True
+
+
+def load_history() -> list[str]:
+    try:
+        data = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+        return [w for w in data if isinstance(w, str)] if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def add_history(word: str) -> None:
+    """查词历史：最近的在前，去重，最多 60 个。"""
+    word = (word or "").strip()
+    if not word or len(word) > 60:
+        return
+    items = [w for w in load_history() if w.lower() != word.lower()]
+    items.insert(0, word)
+    try:
+        HISTORY_PATH.write_text(json.dumps(items[:60], ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        log(f"[历史] 保存失败 {e!r}")
 
 
 EXPORT_DIR = DATA / "导出"
@@ -404,6 +431,11 @@ def enrich_html(text: str) -> str:
         # 中文和英文之间补空格，避免「language词典」粘在一起
         seg = re.sub(r'(<span class="cn">[^<]{0,200}</span>)', r' \1 ', seg)
         seg = re.sub(r" {2,}", " ", seg).strip()
+        # 整句英文例句（大写开头、句号结尾、至少 4 个词）：标出来，页面会在后面加朗读按钮
+        eng = re.split(r"[\u4e00-\u9fff]", _TAG_RE.sub("", seg), maxsplit=1)[0].strip()
+        if (re.match(r"^[A-Z\"'‘“]", eng) and len(re.findall(r"[A-Za-z]{2,}", eng)) >= 4
+                and re.search(r"[.?!][\"'’”]?$", eng)):
+            seg = f'<span class="ex">{seg}</span>'
         # 行首词性、纯编号做成小标签，层次更分明
         m = POS_RE.match(seg)
         if m:
@@ -532,22 +564,70 @@ TRAY_ICON = None
 VOICE_CACHE = DATA / "cache"
 
 
+_PLAY_LOCK = threading.Lock()
+SAPI = SapiSpeaker(log)
+MCI_FORMATS = (".mp3", ".wav", ".wma")
+
+
 def _play_mp3(path: Path) -> bool:
     alias = "warmword_voice"
-    winmm.mciSendStringW(f"close {alias}", None, 0, None)
-    r = winmm.mciSendStringW(f'open "{path}" type mpegvideo alias {alias}', None, 0, None)
-    if r != 0:
-        log(f"[发音] 打开音频失败 code={r}")
-        return False
-    winmm.mciSendStringW(f"play {alias}", None, 0, None)
+    with _PLAY_LOCK:
+        winmm.mciSendStringW(f"close {alias}", None, 0, None)
+        r = winmm.mciSendStringW(f'open "{path}" type mpegvideo alias {alias}', None, 0, None)
+        if r != 0:
+            log(f"[发音] 打开音频失败 code={r} {path.name}")
+            return False
+        winmm.mciSendStringW(f"play {alias}", None, 0, None)
     return True
 
 
-def speak(word: str, accent: str = "us") -> bool:
-    """有道发音（英/美），失败返回 False。"""
-    word = (word or "").strip()
-    if not word:
+def _trim_cache(folder: Path, pattern: str, keep: int = 300) -> None:
+    try:
+        files = sorted(folder.glob(pattern), key=lambda p: p.stat().st_mtime)
+        for old in files[:-keep]:
+            old.unlink()
+    except Exception:
+        pass
+
+
+def speak(text: str, accent: str = "us") -> bool:
+    """读单词或例句：先用有道在线发音（真人/高质量合成），拿不到就用 Windows 自带语音。"""
+    text = re.sub(r"\s+", " ", (text or "")).strip()[:300]
+    if not text:
         return False
+    if _speak_online(text, accent):
+        return True
+    log(f"[发音] 在线发音不可用，改用系统语音：{text[:40]}")
+    return SAPI.speak(text, accent)
+
+
+def play_resource(book_path: str, ref: str) -> dict:
+    """播放词典 mdd 里的发音（sound:// 链接）。MCI 放不了的格式交给页面用浏览器播放。"""
+    import base64
+    book = ENGINE.book(book_path) if ENGINE is not None else None
+    if book is None or not hasattr(book, "resources"):
+        return {"ok": False, "why": "这本词典没有发音资源"}
+    data = book.resources().get(ref)
+    if not data:
+        log(f"[发音] 词典里找不到音频 {ref}（mdd 文件要和 mdx 放在同一个文件夹、同名）")
+        return {"ok": False, "why": "词典里找不到这个音频"}
+    ext = Path(clean_ref(ref)).suffix.lower()
+    if ext in MCI_FORMATS:
+        folder = VOICE_CACHE / "res"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / (hashlib.md5(data).hexdigest() + ext)
+        if not path.exists():
+            path.write_bytes(data)
+        _trim_cache(folder, "*.*")
+        return {"ok": _play_mp3(path)}
+    if ext in (".ogg", ".oga", ".opus", ".m4a", ".aac", ".flac", ".spx"):
+        from dict_render import mime_of
+        return {"ok": False, "data": base64.b64encode(data).decode(), "mime": mime_of(ref)}
+    return {"ok": False, "why": f"不支持的音频格式 {ext}"}
+
+
+def _speak_online(word: str, accent: str = "us") -> bool:
+    """有道发音（英/美；单词和句子都行），失败返回 False。"""
     voice_type = "2" if accent == "us" else "1"
     key = hashlib.md5(f"{word}|{voice_type}".encode("utf-8")).hexdigest()
     VOICE_CACHE.mkdir(parents=True, exist_ok=True)
@@ -565,13 +645,7 @@ def speak(word: str, accent: str = "us") -> bool:
         except Exception as e:
             log(f"[发音] 下载失败 {word}: {e!r}")
             return False
-    # 清缓存：最多 300 个文件
-    try:
-        files = sorted(VOICE_CACHE.glob("*.mp3"), key=lambda p: p.stat().st_mtime)
-        for old in files[:-300]:
-            old.unlink()
-    except Exception:
-        pass
+    _trim_cache(VOICE_CACHE, "*.mp3")  # 清缓存：最多 300 个文件
     return _play_mp3(path)
 
 
@@ -670,14 +744,73 @@ def push_hotkeys() -> None:
         push(name, "setHotkeys", data)
 
 
+BOOK_CSS_REFS: dict[str, list[str]] = {}  # 每本词典用到的样式表
+
+
+def book_resources(path: str):
+    book = ENGINE.book(path) if ENGINE is not None else None
+    if book is None or not hasattr(book, "resources"):
+        return None
+    try:
+        return book.resources()
+    except Exception as e:
+        log(f"[资源] {Path(path).name} 加载失败 {e!r}")
+        return None
+
+
 def entry_dicts(entries: list[Entry], limit: int | None = None) -> list[dict]:
+    """把词条整理成页面要的格式。
+
+    mode=rich：词典原版 HTML（脚本已去掉），页面放进 Shadow DOM 并套上词典自带样式
+    mode=ecdict：ECDICT 结构化释义
+    mode=simple：压成简洁文字（设置里选「简洁」时）
+    """
     out = []
+    rich = CONFIG.get("render_mode", "rich") != "simple"
     for e in entries:
-        h = clean_html(e.html)
-        if limit and len(h) > limit:
-            h = h[:limit] + "…（内容较长，点「详情」看完整释义）"
-        out.append({"dict": e.dict_name, "html": h})
+        item = {"dict": e.dict_name, "book": e.source, "head": e.headword}
+        if e.kind == "ecdict":
+            item.update(mode="ecdict", html=e.html)
+        elif rich:
+            res = book_resources(e.source)
+            html, css_refs, _has_sound = rewrite_html(e.html, res)
+            refs = BOOK_CSS_REFS.setdefault(e.source, [])
+            refs.extend(r for r in css_refs if r not in refs)
+            item.update(mode="rich", html=html,
+                        css_id=hashlib.md5("|".join(refs).encode("utf-8")).hexdigest()[:8] if refs else "")
+        else:
+            h = clean_html(e.html)
+            if limit and len(h) > limit:  # 只在换行处截断，不把标签切坏
+                cut = h.rfind("<br>", 0, limit)
+                h = h[:cut if cut > 0 else limit] + "<br>…（内容较长，点「详情」看完整释义）"
+            item.update(mode="simple", html=h)
+        out.append(item)
     return out
+
+
+def book_css(path: str) -> str:
+    res = book_resources(path)
+    if res is None:
+        return ""
+    parts = []
+    for ref in BOOK_CSS_REFS.get(path, []):
+        try:
+            parts.append(res.css(ref))
+        except Exception as e:
+            log(f"[资源] 样式表 {ref} 读取失败 {e!r}")
+    return "\n".join(parts)
+
+
+def prefs() -> dict:
+    return {"font_scale": float(CONFIG.get("font_scale", 1.0) or 1.0),
+            "render_mode": CONFIG.get("render_mode", "rich"),
+            "accent": CONFIG.get("accent", "us")}
+
+
+def push_prefs() -> None:
+    data = prefs()
+    for name in WINDOWS:
+        push(name, "WW.setPrefs", data)
 
 
 def float_height_limit() -> int:
@@ -969,6 +1102,9 @@ def settings_payload() -> dict:
         "dictionaries": dicts,
         "auto_capture": bool(CONFIG.get("auto_capture", True)),
         "capture_modifier": CONFIG.get("capture_modifier", "") or "",
+        "render_mode": CONFIG.get("render_mode", "rich"),
+        "font_scale": float(CONFIG.get("font_scale", 1.0) or 1.0),
+        "auto_speak": bool(CONFIG.get("auto_speak", False)),
         "baidu_appid": CONFIG.get("baidu_appid", ""),
         "baidu_key": CONFIG.get("baidu_key", ""),
         "data_dir": str(DATA),
@@ -1023,13 +1159,15 @@ def show_translate(text: str) -> None:
 
 # ---------------- JS 接口 ----------------
 class JsApi:
-    def search(self, word: str) -> dict:
+    def search(self, word: str, record: bool = False) -> dict:
         word = (word or "").strip()
         if not word:
             return {"word": word, "entries": []}
         if ENGINE is None:
             return {"word": word, "entries": [], "status": "词典还在加载，请稍等几秒"}
-        entries = ENGINE.lookup(word)[:6]
+        entries = ENGINE.lookup(word)[:8]
+        if entries and record:
+            add_history(word)
         out = {"word": word, "entries": entry_dicts(entries)}
         if not entries:
             if not ENGINE.books:
@@ -1044,20 +1182,50 @@ class JsApi:
     def get_accent(self) -> str:
         return CONFIG.get("accent", "us")
 
+    def get_prefs(self) -> dict:
+        return prefs()
+
+    def set_font_scale(self, scale: float) -> dict:
+        try:
+            CONFIG["font_scale"] = round(max(0.8, min(1.8, float(scale))), 2)
+        except Exception:
+            pass
+        save_config()
+        push_prefs()
+        return prefs()
+
+    def recent(self) -> list[str]:
+        return load_history()[:24]
+
+    def clear_history(self) -> bool:
+        try:
+            HISTORY_PATH.unlink()
+        except Exception:
+            pass
+        return True
+
+    def book_css(self, path: str) -> str:
+        return book_css(path)
+
+    def play_sound(self, book: str, ref: str) -> dict:
+        try:
+            return play_resource(book, ref)
+        except Exception as e:
+            log(f"[发音] 播放词典音频失败 {e!r}")
+            return {"ok": False, "why": "播放失败"}
+
+    def speak_text(self, text: str, accent: str = "") -> bool:
+        return speak(text, accent or CONFIG.get("accent", "us"))
+
     def suggest(self, prefix: str) -> list[str]:
         if ENGINE is None:
             return []
         return ENGINE.suggest((prefix or "").strip(), 8)
 
-    def word_detail(self, word: str) -> str:
+    def word_detail(self, word: str) -> list[dict]:
         if ENGINE is None:
-            return "词典还没加载完"
-        entries = ENGINE.lookup((word or "").strip())[:4]
-        return "".join(
-            f'<div style="margin-bottom:8px"><div class="w-brief">{e.dict_name}</div>'
-            f'{clean_html(e.html)}</div>'
-            for e in entries
-        ) or "没有找到释义"
+            return []
+        return entry_dicts(ENGINE.lookup((word or "").strip())[:4])
 
     def translate_text(self, text: str) -> str | None:
         return translator.translate(text)
@@ -1150,7 +1318,8 @@ class JsApi:
                 {k: v for k, v in incoming.items() if k in HOTKEY_LABELS})
         if new_dicts is not None:
             CONFIG["dictionaries"] = new_dicts
-        for key in ("auto_capture", "capture_only_english", "online_translate", "hide_tray_icon"):
+        for key in ("auto_capture", "capture_only_english", "online_translate", "hide_tray_icon",
+                    "auto_speak"):
             if key in payload:
                 CONFIG[key] = bool(payload[key])
         if "hover_delay_ms" in payload:
@@ -1160,6 +1329,13 @@ class JsApi:
                 pass
         if payload.get("accent") in ("us", "uk"):
             CONFIG["accent"] = payload["accent"]
+        if payload.get("render_mode") in ("rich", "simple"):
+            CONFIG["render_mode"] = payload["render_mode"]
+        if "font_scale" in payload:
+            try:
+                CONFIG["font_scale"] = round(max(0.8, min(1.8, float(payload["font_scale"]))), 2)
+            except Exception:
+                pass
         if "capture_modifier" in payload and payload["capture_modifier"] in ("", *CAPTURE_MODIFIERS):
             CONFIG["capture_modifier"] = payload["capture_modifier"]
         for key in ("baidu_appid", "baidu_key"):
@@ -1172,6 +1348,7 @@ class JsApi:
         save_config()
 
         STATE.auto_capture = bool(CONFIG.get("auto_capture", True))
+        push_prefs()
         if TRAY_ICON is not None:
             try:
                 TRAY_ICON.update_menu()
@@ -1241,6 +1418,9 @@ class JsApi:
             log(f"[取词] 识别到: {res['word']}")
             show_float_near_cursor(res["word"], res["entries"],
                                    res["x"], res["y"], push_content=False)
+            if CONFIG.get("auto_speak"):
+                threading.Thread(target=speak, args=(res["word"], CONFIG.get("accent", "us")),
+                                 daemon=True).start()
             return {"word": res["word"], "loading": False, "status": res.get("note", ""),
                     "pinned": STATE.float_pinned,
                     "entries": entry_dicts(res["entries"], limit=700)}
@@ -1274,13 +1454,13 @@ class JsApi:
             with STATE.lock:
                 if STATE.float_visible and STATE.float_word == word:
                     return
-            entries = ENGINE.lookup(word)[:1]
+            entries = ENGINE.lookup(word)[:6]  # 浮窗里每本词典一个标签，可以切换
             note = ""
             if not entries and len(word) >= 5 and re.fullmatch(r"[A-Za-z'’-]+", word):
                 # 识别偶尔认错一个字母（l/I、rn/m）：只接受编辑距离为 1 的纠正，
                 # 以前用前 4 个字母的前缀去猜，人名、术语会弹出不相干的词
                 for cand in ENGINE.fuzzy(word, limit=3, max_dist=1):
-                    entries = ENGINE.lookup(cand)[:1]
+                    entries = ENGINE.lookup(cand)[:6]
                     if entries:
                         note = f"识别为「{word}」，按「{cand}」显示"
                         log(f"[取词] {note}")
@@ -1331,10 +1511,12 @@ class JsApi:
             if ENGINE is None:
                 notify("词典还在加载，请稍等几秒", key="engine-loading")
                 return
-            entries = ENGINE.lookup(word)[:4]
+            entries = ENGINE.lookup(word)[:6]
             # 手动取词查不到也弹浮窗告诉用户，不再悄无声息
             show_float_near_cursor(word, entries, x, y,
                                    status="" if entries else "词典里没有")
+            if entries and CONFIG.get("auto_speak"):
+                speak(word, CONFIG.get("accent", "us"))
         elif task == "add_vocab":
             word = None
             with STATE.lock:
@@ -1520,9 +1702,26 @@ def reload_hotkeys_async() -> None:
         log(f"[热键] 重载通知失败 {e!r}")
 
 
+def preload_resources(engine: DictEngine) -> None:
+    """后台提前读好各词典的 mdd 索引，第一次查词时不用等。"""
+    def run():
+        for b in engine.books:
+            if not hasattr(b, "resources"):
+                continue
+            t0 = time.time()
+            res = b.resources()
+            if res.has_mdd:
+                log(f"[资源] {b.name}: 已加载 mdd（{time.time() - t0:.1f} 秒）")
+            for err in res.errors:
+                log(f"[资源] {b.name}: {err}")
+    threading.Thread(target=run, daemon=True).start()
+
+
 def build_engine() -> DictEngine:
     books = [(d["path"], d.get("name")) for d in CONFIG.get("dictionaries", [])]
     engine = DictEngine(books, cache_dir=INDEX_DIR)
+    BOOK_CSS_REFS.clear()
+    preload_resources(engine)
     names = "、".join(f"{b.name}（{len(b):,} 条）" for b in engine.books)
     log(f"[词典就绪] {names or '没有可用的词典'}")
     if engine.errors:
@@ -2130,11 +2329,18 @@ def main():
     CAPTURE = CaptureClient()  # 取词交给独立小进程（文字接口只能在进程主线程用）
 
     ui = RES / "ui"
-    float_html = (ui / "float.html").read_text(encoding="utf-8")
-    lookup_html = (ui / "lookup.html").read_text(encoding="utf-8")
-    translate_html = (ui / "translate.html").read_text(encoding="utf-8")
-    vocab_html = (ui / "vocab.html").read_text(encoding="utf-8")
-    settings_html = (ui / "settings.html").read_text(encoding="utf-8")
+    # 释义渲染脚本和样式几个窗口共用，加载时内嵌进每个页面（页面是 html 字符串，没法引外部文件）
+    common = ("<style>" + (ui / "entry.css").read_text(encoding="utf-8") + "</style>\n<script>"
+              + (ui / "entry.js").read_text(encoding="utf-8") + "</script>")
+
+    def page(name: str) -> str:
+        return (ui / f"{name}.html").read_text(encoding="utf-8").replace("<!--WW_COMMON-->", common)
+
+    float_html = page("float")
+    lookup_html = page("lookup")
+    translate_html = page("translate")
+    vocab_html = page("vocab")
+    settings_html = page("settings")
 
     WINDOWS["float"] = webview.create_window(
         WINDOW_TITLES["float"], html=float_html, js_api=API,

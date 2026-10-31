@@ -114,6 +114,7 @@
   .prog { height: 4px; border-radius: 3px; background: #eadfc7; margin-top: 6px; overflow: hidden; display: none; }
   .prog i { display: block; height: 100%; width: 0; background: #b06a3f; transition: width .3s; }
 </style>
+<!--WW_COMMON-->
 </head>
 <body>
 <div class="wrap">
@@ -175,6 +176,24 @@
     </div>
 
     <div class="card">
+      <h3>释义显示</h3>
+      <div class="row">
+        <div class="lbl">排版<span class="sub">原版：词典自带样式、图片、例句发音</span></div>
+        <div class="grow"></div>
+        <div class="seg" id="renderSeg">
+          <button data-render="rich">原版排版</button>
+          <button data-render="simple">简洁文字</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="lbl">释义字号<span class="sub">查词窗右上角 A− / A+ 也能调</span></div>
+        <div class="grow"></div>
+        <input type="range" id="fontScale" min="0.8" max="1.8" step="0.1">
+        <span class="val" id="fontVal">100%</span>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>翻译与发音</h3>
       <div class="row">
         <div class="lbl">联网整句翻译<span class="sub">关掉就只用本地词典</span></div>
@@ -192,7 +211,12 @@
         <input class="txt" id="baiduKey" type="password" autocomplete="off" spellcheck="false">
       </div>
       <div class="row">
-        <div class="lbl">默认发音<span class="sub">浮窗发音按钮的默认口音</span></div>
+        <div class="lbl">取词后自动发音<span class="sub">浮窗弹出时读一遍单词</span></div>
+        <div class="grow"></div>
+        <label class="sw"><input type="checkbox" id="autoSpeak"><span></span></label>
+      </div>
+      <div class="row">
+        <div class="lbl">默认发音<span class="sub">例句朗读、生词本发音用的口音</span></div>
         <div class="grow"></div>
         <div class="seg" id="accentSeg">
           <button data-accent="uk">英式</button>
@@ -404,6 +428,20 @@
     });
   }
 
+  function setRender(m) {
+    data.render_mode = m;
+    document.querySelectorAll("#renderSeg button").forEach(function (b) {
+      b.classList.toggle("on", b.dataset.render === m);
+    });
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("#renderSeg button");
+    if (b) setRender(b.dataset.render);
+  });
+  document.getElementById("fontScale").addEventListener("input", function () {
+    document.getElementById("fontVal").textContent = Math.round(this.value * 100) + "%";
+  });
+
   function setMod(m) {
     data.capture_modifier = m;
     document.querySelectorAll("#modSeg button").forEach(function (b) {
@@ -459,6 +497,10 @@
     document.getElementById("hoverVal").textContent = delay + " 毫秒";
     setAccent(d.accent === "uk" ? "uk" : "us");
     setMod(d.capture_modifier || "");
+    setRender(d.render_mode === "simple" ? "simple" : "rich");
+    document.getElementById("fontScale").value = d.font_scale || 1;
+    document.getElementById("fontVal").textContent = Math.round((d.font_scale || 1) * 100) + "%";
+    document.getElementById("autoSpeak").checked = !!d.auto_speak;
     document.getElementById("baiduAppid").value = d.baidu_appid || "";
     document.getElementById("baiduKey").value = d.baidu_key || "";
     document.getElementById("dataDir").textContent = d.data_dir || "";
@@ -494,6 +536,9 @@
       online_translate: document.getElementById("onlineTranslate").checked,
       accent: data.accent,
       capture_modifier: data.capture_modifier || "",
+      render_mode: data.render_mode || "rich",
+      font_scale: parseFloat(document.getElementById("fontScale").value) || 1,
+      auto_speak: document.getElementById("autoSpeak").checked,
       baidu_appid: document.getElementById("baiduAppid").value.trim(),
       baidu_key: document.getElementById("baiduKey").value.trim(),
       autostart: document.getElementById("autostart").checked,

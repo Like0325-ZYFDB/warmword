@@ -62,6 +62,7 @@
   }
   @keyframes r { to { transform: rotate(360deg); } }
 </style>
+<!--WW_COMMON-->
 </head>
 <body>
 <div class="wrap">
@@ -126,8 +127,9 @@
     if (!el.dataset.loaded) {
       el.dataset.loaded = "1";
       el.innerHTML = '<span class="spin"></span>查询中…';
-      window.pywebview.api.word_detail(window.__words[i]).then(function (html) {
-        el.innerHTML = html || "没有找到释义";
+      window.pywebview.api.word_detail(window.__words[i]).then(function (entries) {
+        if (!entries || !entries.length) { el.innerHTML = "没有找到释义"; return; }
+        WW.render(el, entries, { onEntry: function (w) { window.pywebview.api.open_lookup(w); } });
       });
     }
   }

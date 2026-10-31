@@ -15,6 +15,15 @@
     letter-spacing: 2px; margin-bottom: 9px; flex: none;
   }
   .title .deco { color: #c2a06a; font-size: 14px; margin: 0 5px; }
+  .title { display: flex; align-items: center; }
+  .title .size { margin-left: auto; display: flex; gap: 4px; }
+  .title .size .btn { font-family: "Microsoft YaHei", sans-serif; letter-spacing: 0; padding: 2px 8px; }
+  .recent { margin-top: 16px; text-align: left; }
+  .recent .lbl { font-size: 12px; color: #a08c6e; margin-bottom: 6px; display: flex; }
+  .recent .lbl a { margin-left: auto; color: #b8a585; cursor: pointer; }
+  .recent .w { display: inline-block; margin: 3px 4px; padding: 2px 10px; border-radius: 9px;
+               border: 1px solid #e2d5bb; color: #6b4a2b; cursor: pointer; font-size: 13px; }
+  .recent .w:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
   .search-box { position: relative; flex: none; }
   #q {
     width: 100%; box-sizing: border-box;
@@ -79,16 +88,18 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 </style>
+<!--WW_COMMON-->
 </head>
 <body>
 <div class="wrap">
-  <div class="title"><span class="deco">✿</span>暖词 · 快捷查词<span class="deco">✎</span></div>
+  <div class="title"><span class="deco">✿</span>暖词 · 快捷查词<span class="deco">✎</span>
+    <span class="size"><button class="btn" onclick="zoom(-0.1)" title="释义字号缩小">A−</button><button class="btn" onclick="zoom(0.1)" title="释义字号放大">A+</button></span></div>
   <div class="search-box">
     <input id="q" placeholder="输入单词或中文，回车查词…" autocomplete="off" spellcheck="false">
     <div class="suggest" id="suggest" style="display:none"></div>
   </div>
   <div class="body" id="body">
-    <div class="empty">输入单词开始查词<br><br>—— 词典在手，慢慢探索 ——</div>
+    <div class="empty">输入单词开始查词<br><br>—— 词典在手，慢慢探索 ——<div class="recent" id="recent"></div></div>
   </div>
   <div class="hint">↑↓ 选补全 · Esc 关闭　·　<span data-hk="translate">Ctrl+Alt+T</span> 翻译选中　·　<span data-hk="capture">Ctrl+Alt+E</span> 取词　·　变形自动回溯</div>
 </div>
@@ -115,7 +126,7 @@
       clearTimeout(timer);
       if (open && active >= 0) { pickSuggest(suggestWords[active]); return; }
       hideSuggest();
-      doSearch(true);
+      doSearch(true, true);
     }
     if (e.key === "Escape") {
       if (open) { hideSuggest(); return; }  // 先收起补全，再按一次 Esc 关窗
@@ -138,11 +149,12 @@
     });
   }
 
-  function doSearch(noSuggest) {
+  // record=true：明确查的词（回车、选补全、点链接）才记进历史，打字过程中的半截词不记
+  function doSearch(noSuggest, record) {
     var w = q.value.trim();
     var my = ++seq;  // 打字快时旧请求可能后回来，只认最新一次
-    if (!w) { hideSuggest(); return; }
-    window.pywebview.api.search(w).then(function (data) {
+    if (!w) { hideSuggest(); showRecent(); return; }
+    window.pywebview.api.search(w, record === true).then(function (data) {
       if (my === seq) renderLookup(data);
     });
     if (noSuggest === true) return;
@@ -171,8 +183,31 @@
     q.value = w;
     hideSuggest();
     clearTimeout(timer);
-    doSearch(true);
+    doSearch(true, true);
   }
+  window.lookupWord = pickSuggest;
+
+  function showRecent() {
+    var body = document.getElementById("body");
+    body.innerHTML = '<div class="empty">输入单词开始查词<br><br>—— 词典在手，慢慢探索 ——<div class="recent" id="recent"></div></div>';
+    window.pywebview.api.recent().then(function (words) {
+      var box = document.getElementById("recent");
+      if (!box || !words || !words.length) return;
+      var html = '<div class="lbl">最近查过<a onclick="clearRecent()">清空</a></div>';
+      words.forEach(function (w) {
+        html += '<span class="w" data-w="' + esc(w).replace(/"/g, "&quot;") + '">' + esc(w) + '</span>';
+      });
+      box.innerHTML = html;
+    });
+  }
+  window.clearRecent = function () {
+    window.pywebview.api.clear_history().then(showRecent);
+  };
+  window.zoom = function (d) {
+    var v = Math.round(((WW.prefs.font_scale || 1) + d) * 10) / 10;
+    window.pywebview.api.set_font_scale(v).then(WW.setPrefs);
+  };
+  window.addEventListener("pywebviewready", showRecent);
 
   window.renderLookup = function (data) {
     currentWord = data.word || "";
@@ -198,16 +233,14 @@
       '<button class="btn" onclick="speak(\'uk\')">英</button>' +
       '<button class="btn" onclick="speak(\'us\')">美</button>' +
       '<button class="btn" id="vbtn" onclick="addVocabWord()">收藏</button></div>';
-    data.entries.forEach(function (e) {
-      head += '<div class="entry"><div class="dict-name">' + esc(e.dict) + '</div>' +
-              '<div class="def-body">' + e.html + '</div></div>';
-    });
-    body.innerHTML = head;
+    body.innerHTML = head + '<div id="entries"></div>';
+    // 词典原版排版；多本词典时顶部可跳转；双击释义里的词 / 点词条链接直接在这里查
+    WW.render(document.getElementById("entries"), data.entries, { nav: true, onEntry: pickSuggest });
     document.body.scrollTop = 0;
     body.scrollTop = 0;
   };
   document.getElementById("body").addEventListener("click", function (e) {
-    var a = e.target.closest && e.target.closest(".dym a");
+    var a = e.target.closest && e.target.closest(".dym a, .recent .w");
     if (a) pickSuggest(a.dataset.w);
   });
 

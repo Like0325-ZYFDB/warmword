@@ -7,6 +7,8 @@ import json
 import subprocess
 import sys
 
+sys.stdout.reconfigure(encoding="utf-8")  # Windows 控制台默认 cp1252，打印中文会报错
+
 exe = sys.argv[1]
 req = json.dumps({"op": "word", "x": 100, "y": 100, "id": 7}) + "\n"
 p = subprocess.run([exe, "--capture-service"], input=req, capture_output=True,

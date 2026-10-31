@@ -72,6 +72,7 @@
   }
   @keyframes r { to { transform: rotate(360deg); } }
 </style>
+<!--WW_COMMON-->
 </head>
 <body>
 <div class="card">
@@ -130,15 +131,16 @@
     if (!data.entries || !data.entries.length) {
       inner.innerHTML = '<div class="empty">' +
         (data.loading ? '<span class="spin"></span>正在查询…' : '词典里没有找到这个词') + '</div>';
+      fitHeight();
     } else {
-      var html = "";
-      data.entries.forEach(function (e) {
-        html += '<div class="entry"><div class="dict-name">' + esc(e.dict) + '</div>' +
-                '<div class="def-body">' + e.html + '</div></div>';
+      inner.scrollTop = 0;
+      // 每本词典一个标签；双击释义里的单词 / 点词条链接 → 打开查词窗查它
+      WW.render(inner, data.entries, {
+        tabs: true,
+        onEntry: function (w) { window.pywebview.api.open_lookup(w); },
+        onRendered: fitHeight
       });
-      inner.innerHTML = html;
     }
-    fitHeight();
   };
 
   function closeMe() { window.pywebview.api.close_window("float"); }

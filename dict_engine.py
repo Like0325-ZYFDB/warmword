@@ -86,6 +86,8 @@ class Entry:
     dict_name: str   # 词典显示名
     headword: str    # 词头
     html: str        # 释义原文（html）
+    source: str = ""  # 来自哪本词典（路径），用来找它的 mdd 资源
+    kind: str = "mdx"  # mdx：词典原文；ecdict：程序自己生成的结构化 HTML
 
     @property
     def plain(self) -> str:
@@ -195,7 +197,17 @@ class DictBook:
             fold = k if self.case_sensitive else k.casefold()
             self._index.setdefault(fold, []).append(i)
         self._sorted = sorted(self._index)  # 前缀补全用二分查找，不用每次扫全表
+        self._res = None
+        self._res_lock = threading.Lock()
         self.load_seconds = time.time() - t0
+
+    def resources(self):
+        """同目录的 mdd（发音、图片、样式），第一次用到时才加载。"""
+        with self._res_lock:
+            if self._res is None:
+                from dict_render import Resources
+                self._res = Resources(self.path)
+        return self._res
 
     def __len__(self):
         return len(self._keys)
@@ -260,7 +272,7 @@ class DictBook:
                 if token in seen:
                     continue
                 seen.add(token)
-                results.append(Entry(self.name, head, html))
+                results.append(Entry(self.name, head, html, self.path))
             if results:
                 break  # 回退到第一个有结果的形态就停
         return results
@@ -369,20 +381,34 @@ def csv_to_sqlite(csv_path: Path, db_path: Path) -> None:
     os.replace(tmp, db_path)
 
 
+_POS_RE = re.compile(r"^((?:[a-z]+\.\s*(?:&|/)?\s*)+|\[[^\]]{1,8}\])\s*")
+
+
 def _ecdict_html(word, phonetic, definition, translation, tag) -> str:
+    """ECDICT 词条排成结构化 HTML：音标、按词性分行的中文释义、英文释义、考纲标签。"""
     esc = lambda t: html_mod.escape(t or "", quote=False)  # noqa: E731
+
+    def lines(text):
+        return [x.strip() for x in (text or "").replace("\\n", "\n").split("\n") if x.strip()]
+
+    def with_pos(line):
+        m = _POS_RE.match(line)
+        if not m:
+            return esc(line)
+        return f'<span class="ec-pos">{esc(m.group(1).strip())}</span>{esc(line[m.end():])}'
+
     parts = []
     if phonetic:
-        parts.append(f"<div>/{esc(phonetic)}/</div>")
-    for line in (translation or "").replace("\\n", "\n").split("\n"):
-        if line.strip():
-            parts.append(f"<div>{esc(line.strip())}</div>")
-    for line in (definition or "").replace("\\n", "\n").split("\n"):
-        if line.strip():
-            parts.append(f"<div><i>{esc(line.strip())}</i></div>")
+        parts.append(f'<div class="ec-phon">/{esc(phonetic)}/</div>')
+    tr = lines(translation)
+    if tr:
+        parts.append('<div class="ec-tr">' + "".join(f"<div>{with_pos(x)}</div>" for x in tr) + "</div>")
+    df = lines(definition)
+    if df:
+        parts.append('<div class="ec-def">' + "".join(f"<div>{with_pos(x)}</div>" for x in df) + "</div>")
     tags = [ECDICT_TAGS[t] for t in (tag or "").split() if t in ECDICT_TAGS]
     if tags:
-        parts.append(f"<div><small>考纲：{' '.join(tags)}</small></div>")
+        parts.append('<div class="ec-tags">' + "".join(f"<span>{t}</span>" for t in tags) + "</div>")
     return "".join(parts)
 
 
@@ -434,8 +460,8 @@ class EcdictBook:
                         if hits:
                             break
             if hits:
-                return [Entry(self.name, r[0], _ecdict_html(r[0], r[1], r[2], r[3], r[4]))
-                        for r in hits[:2]]
+                return [Entry(self.name, r[0], _ecdict_html(r[0], r[1], r[2], r[3], r[4]),
+                              self.path, "ecdict") for r in hits[:2]]
         return []
 
     def _prefix_rows(self, sw: str, sql_tail: str = "", *args, limit: int = 400):
@@ -526,6 +552,12 @@ class DictEngine:
     def rank(self, word: str) -> int | None:
         ranks = [r for r in (b.rank(word) for b in self.books) if r]
         return min(ranks) if ranks else None
+
+    def book(self, path: str):
+        for b in self.books:
+            if b.path == path:
+                return b
+        return None
 
 
 if __name__ == "__main__":

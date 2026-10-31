@@ -1,0 +1,48 @@
+/* 暖词 · 释义共用样式（随 entry.js 一起内嵌进页面） */
+.def-body:not(.rich) { font-size: calc(14.5px * var(--ww-scale, 1)); }
+.def-body .ex { color: #3a4a5c; }
+.ww-say { cursor: pointer; margin-left: 5px; font-size: .82em; opacity: .55; user-select: none; font-style: normal; }
+.ww-say:hover { opacity: 1; }
+.ww-playing { animation: ww-pulse .5s ease 3; }
+@keyframes ww-pulse { 50% { opacity: .25; } }
+
+/* 词典切换标签（浮窗）/ 跳转（查词窗） */
+.ww-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 6px; }
+.ww-tabs button {
+  border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45; cursor: pointer;
+  border-radius: 9px; padding: 1px 9px; font-size: 11.5px; font-family: "KaiTi", serif; letter-spacing: .5px;
+}
+.ww-tabs button.on, .ww-tabs button:hover { background: #a9895f; border-color: #a9895f; color: #fff; }
+
+/* ECDICT */
+.ec-phon { color: #9c8b72; font-style: italic; margin-bottom: 3px; }
+.ec-tr > div { margin: 2px 0; color: #3f342a; }
+.ec-pos {
+  display: inline-block; min-width: 28px; margin-right: 6px; padding: 0 6px; border-radius: 7px;
+  background: #f0e4cf; color: #8a5a2b; font-size: .82em; font-weight: 600; text-align: center;
+}
+.ec-def { margin-top: 6px; padding-top: 5px; border-top: 1px dotted #e2d5bb; color: #6f6150; font-size: .92em; }
+.ec-def > div { margin: 1px 0; }
+.ec-def .ec-pos { background: #efe9dc; color: #8a7a62; }
+.ec-tags { margin-top: 6px; }
+.ec-tags span {
+  display: inline-block; margin: 0 4px 2px 0; padding: 0 7px; border-radius: 7px;
+  border: 1px solid #d9c8a6; color: #8a6a45; font-size: .78em;
+}
+
+/* 选中文字的小工具条、提示 */
+.ww-selbar {
+  position: fixed; z-index: 99; display: none; gap: 2px; padding: 3px;
+  background: #3d3229; border-radius: 9px; box-shadow: 0 6px 18px rgba(0,0,0,.22);
+}
+.ww-selbar button {
+  border: 0; background: transparent; color: #fff; cursor: pointer;
+  font-size: 12px; padding: 3px 9px; border-radius: 6px; font-family: "Microsoft YaHei", sans-serif;
+}
+.ww-selbar button:hover { background: #b06a3f; }
+.ww-toast {
+  position: fixed; left: 50%; bottom: 14px; transform: translate(-50%, 10px); z-index: 100;
+  background: rgba(61, 50, 41, .92); color: #fff; font-size: 12px; padding: 6px 13px; border-radius: 9px;
+  opacity: 0; pointer-events: none; transition: .2s; max-width: 80%;
+}
+.ww-toast.on { opacity: 1; transform: translate(-50%, 0); }
