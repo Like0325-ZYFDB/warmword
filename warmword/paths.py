@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """目录约定：程序目录（只读资源）与用户数据目录（配置、生词本、缓存、日志）。
 
-- 源码运行：程序目录 = 本文件所在目录
+- 源码运行：程序目录 = 仓库根目录（main.py 所在处）
 - 打包运行：程序目录 = exe 所在目录，界面资源在 PyInstaller 的解包目录
 - 用户数据默认放 %APPDATA%\\WarmWord，程序目录放了 portable.txt 时改为放程序目录（便携版）
 """
@@ -13,10 +13,20 @@ import sys
 from pathlib import Path
 
 FROZEN = bool(getattr(sys, "frozen", False))
-BASE = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
+BASE = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 RES = Path(getattr(sys, "_MEIPASS", BASE))
+UI_DIR = RES / "ui"
 PORTABLE = (BASE / "portable.txt").exists()
 DATA = BASE if PORTABLE else Path(os.environ.get("APPDATA") or Path.home()) / "WarmWord"
+
+CONFIG_PATH = DATA / "config.json"
+VOCAB_PATH = DATA / "生词本.json"
+HISTORY_PATH = DATA / "查词历史.json"
+DICT_DIR = DATA / "词库"                 # 下载的 ECDICT 放这里
+INDEX_DIR = DATA / "cache" / "index"     # ECDICT csv 转出来的 sqlite 索引
+VOICE_DIR = DATA / "cache" / "voice"     # 在线发音缓存
+EXPORT_DIR = DATA / "导出"
+LOG_DIR = DATA / "logs"
 
 # 旧版本放在程序目录里的用户数据，首次运行新版时复制到数据目录（原文件保留不动）
 _OLD_FILES = ("config.json", "生词本.json")

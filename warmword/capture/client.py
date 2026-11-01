@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from paths import BASE, FROZEN
+from ..paths import BASE, FROZEN
 
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
@@ -21,12 +21,13 @@ class CaptureClient:
         self._proc: subprocess.Popen | None = None
         self._seq = 0
         self._timeouts = 0
+        self.status: dict = {}
         self._start()
 
     def _command(self) -> list[str]:
         if FROZEN:  # 打包后没有 .py 文件：同一个 exe 带参数启动取词服务
             return [sys.executable, "--capture-service"]
-        return [sys.executable, str(BASE / "capture_service.py")]
+        return [sys.executable, "-m", "warmword.capture.service"]
 
     def _start(self):
         try:
@@ -37,8 +38,9 @@ class CaptureClient:
                 bufsize=1, cwd=str(BASE), creationflags=CREATE_NO_WINDOW)
             threading.Thread(target=self._reader, args=(self._proc, self._queue),
                              daemon=True).start()
-            try:  # 等就绪消息
-                self._queue.get(timeout=8)
+            try:  # 等就绪消息（带着各级取词是否可用）
+                ready = self._queue.get(timeout=15)
+                self.status = ready.get("status") or {}
             except queue.Empty:
                 pass
         except Exception:
@@ -108,14 +110,16 @@ class CaptureClient:
                         self._restart()
                     return None
 
-    def word_at(self, x: int, y: int) -> str | None:
-        r = self._call({"op": "word", "x": int(x), "y": int(y)}, timeout=8.0)
-        return (r or {}).get("word")
+    def word_at(self, x: int, y: int) -> dict:
+        """{"word": ..., "box": [l, t, r, b], "via": "uia" / "ocr", "ms": 耗时}；失败返回 {}。"""
+        return self._call({"op": "word", "x": int(x), "y": int(y)}, timeout=3.0) or {}
 
     def selection(self) -> str | None:
-        r = self._call({"op": "selection"}, timeout=3.0)
+        r = self._call({"op": "selection"}, timeout=2.0)
         return (r or {}).get("text")
 
-    def probe_at(self, x: int, y: int) -> dict:
-        r = self._call({"op": "probe", "x": int(x), "y": int(y)}, timeout=3.0)
-        return (r or {}).get("probe") or {"error": "no reply"}
+    def refresh_status(self) -> dict:
+        r = self._call({"op": "status"}, timeout=3.0)
+        if r and r.get("status"):
+            self.status = r["status"]
+        return self.status

@@ -25,11 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller pytest
 
-      - name: 单元测试
-        run: python -m pytest -q tests
+      - name: 单元测试（含 Windows 专用：系统文字识别、取词服务、高亮窗口）
+        run: python -m pytest -q -rs tests
 
       - name: 导入检查（Windows 专用模块）
-        run: python -c "import text_capture, screen_ocr, capture_client, capture_service, dict_engine, translate, wordlist, paths"
+        run: python -c "import warmword.app, warmword.api, warmword.windows, warmword.overlay, warmword.tray, warmword.capture.uia, warmword.capture.winocr, warmword.capture.rapid"
 
       - name: 生成 UI Automation 接口（打包时一起带上）
         run: python -c "from comtypes.client import GetModule; GetModule('UIAutomationCore.dll')"
@@ -39,11 +39,12 @@ jobs:
           pyinstaller --noconfirm --windowed --name WarmWord
           --add-data "ui;ui"
           --collect-all rapidocr_onnxruntime
+          --collect-all winrt
           --collect-submodules comtypes.gen
-          --hidden-import capture_service
-          app.py
+          --collect-submodules warmword
+          main.py
 
-      - name: 冒烟测试（打包后的取词服务能启动、能加载识别模型）
+      - name: 冒烟测试（打包后的取词服务能启动、各级取词可用）
         run: python tests/smoke_frozen.py dist/WarmWord/WarmWord.exe
 
       - name: 压缩

@@ -3,7 +3,7 @@
 import sys
 import textwrap
 
-import capture_client
+from warmword.capture import client as capture_client
 
 FAKE_SERVICE = textwrap.dedent('''
     import json, sys, time

@@ -1,165 +1,97 @@
 <!doctype html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<title>暖词 · 翻译</title>
+<link rel="stylesheet" href="theme.css">
 <style>
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: linear-gradient(165deg, #faf6ee 0%, #f5eddd 100%);
-    font-family: "Microsoft YaHei", sans-serif;
-    color: #3d3229;
-  }
-  .wrap { padding: 14px 16px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
-  .title {
-    font-family: "KaiTi", "STKaiti", serif; font-size: 18px; color: #7a5c3e;
-    letter-spacing: 2px; margin-bottom: 9px; flex: none;
-    display: flex; align-items: center;
-  }
-  .title .deco { color: #c2a06a; font-size: 14px; margin: 0 5px; }
-  .title .btn { margin-left: auto; }
-  .panel {
-    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 14px;
-    padding: 11px 14px; flex: none;
-  }
-  .label {
-    font-family: "KaiTi", serif; font-size: 12px; color: #a08c6e;
-    letter-spacing: 2px; margin-bottom: 5px;
-  }
-  .orig { font-size: 13.5px; line-height: 1.75; color: #4a3d2f; }
-  .trans {
-    margin-top: 10px; font-size: 15px; line-height: 1.85; color: #6b4a2b;
-    border-top: 1px dashed #d8cbb2; padding-top: 9px;
-    font-family: "KaiTi", "STKaiti", serif;
-  }
-  .words { margin-top: 9px; flex: 1; overflow-y: auto; }
-  .words::-webkit-scrollbar { width: 7px; }
-  .words::-webkit-scrollbar-thumb { background: #d8cbb2; border-radius: 4px; }
-  .w-item {
-    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 12px;
-    margin-bottom: 7px; overflow: hidden;
-  }
-  .w-head { padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 9px; }
-  .w-head:hover { background: #f7efdf; }
-  .w-word { font-family: "KaiTi", serif; font-size: 16px; color: #6b4a2b; font-weight: 700; }
-  .w-brief { font-size: 12px; color: #8a7a66; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .w-body {
-    display: none; border-top: 1px dashed #d8cbb2; padding: 8px 12px;
-    font-size: 13.5px; line-height: 1.85; color: #3f342a; background: #fffcf4;
-  }
-  .w-body b, .w-body strong { color: #b06a3f; }
-  .w-body .cn { color: #8a5a2b; }
-  .w-body .phon { color: #9c8b72; font-style: italic; font-size: .94em; }
-  .btn {
-    border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45;
-    border-radius: 9px; padding: 3px 10px; font-size: 12px; cursor: pointer;
-  }
-  .btn:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
-  .empty { color: #a08c6e; text-align: center; padding: 26px 10px; font-size: 13px; }
-  .spin {
-    display: inline-block; width: 13px; height: 13px; margin-right: 7px;
-    border: 2px solid #e2d5bb; border-top-color: #b06a3f; border-radius: 50%;
-    animation: r 1s linear infinite; vertical-align: -2px;
-  }
-  @keyframes r { to { transform: rotate(360deg); } }
+  html, body { height: 100%; }
+  body { overflow-y: auto; }
+  .wrap { padding: 16px 20px 20px; }
+  .label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); margin: 0 0 6px; }
+  .label .grow { flex: 1; }
+  #src { width: 100%; min-height: 72px; max-height: 200px; font-size: calc(14px * var(--scale)); background: var(--surface); border-color: transparent; }
+  #src:focus { background: var(--bg); }
+  .out { margin-top: 16px; }
+  #dst { font-size: calc(16px * var(--scale)); line-height: 1.75; white-space: pre-wrap; user-select: text; min-height: 28px; }
+  #dst.loading { color: var(--text-3); }
+  .src-name { font-size: 11.5px; color: var(--text-3); margin-top: 6px; }
+  .words { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .row { display: grid; grid-template-columns: 22px minmax(90px, auto) 1fr auto; align-items: center; gap: 8px;
+    padding: 5px 4px; border-radius: 6px; }
+  .row:hover { background: var(--hover); }
+  .row .w { font-weight: 600; cursor: pointer; }
+  .row .w:hover { color: var(--accent-text); }
+  .row .b { color: var(--text-2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .icon-btn { width: 24px; height: 24px; }
 </style>
-<!--WW_COMMON-->
 </head>
 <body>
 <div class="wrap">
-  <div class="title"><span class="deco">✿</span>暖词 · 翻译选中内容<span class="deco">✎</span>
-    <button class="btn" onclick="copyTrans()">复制译文</button>
-    <button class="btn" onclick="retranslate()">重新翻译</button></div>
-  <div class="panel">
-    <div class="label">原文</div>
-    <div class="orig" id="orig">—</div>
-    <div class="trans" id="trans">—</div>
+  <div class="label"><span>原文</span><span class="grow"></span>
+    <button class="icon-btn" id="sayBtn" title="朗读原文"></button>
+    <button class="btn" id="goBtn" title="Ctrl+Enter">重新翻译</button>
   </div>
-  <div class="label" style="margin:9px 2px 5px;">句中生词 · 点开看释义</div>
-  <div class="words" id="words"><div class="empty">—</div></div>
-  <div class="label" style="margin-top:6px;"><span data-hk="translate">Ctrl+Alt+T</span> 翻译新内容 · Esc 关闭<span id="src"></span></div>
+  <textarea id="src" spellcheck="false"></textarea>
+  <div class="out">
+    <div class="label"><span>译文</span><span class="grow"></span><button class="icon-btn" id="copyBtn" title="复制译文"></button></div>
+    <div id="dst"></div>
+    <div class="src-name" id="srcName"></div>
+  </div>
+  <div class="words" id="words" style="display:none"></div>
 </div>
+<script src="common.js"></script>
 <script>
-  var currentText = "", currentTrans = "";
-  window.__words = [];
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var data = {};
+  $("sayBtn").innerHTML = WW.icon("volume");
+  $("copyBtn").innerHTML = WW.icon("copy");
 
-  function esc(s) {
-    return (s || "").replace(/[&<>]/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
-    });
-  }
-
-  window.renderTranslate = function (data) {
-    currentText = data.original || "";
-    window.__words = (data.words || []).map(function (w) { return w.word; });
-    currentTrans = data.translated || "";
-    document.getElementById("orig").textContent = data.original || "—";
-    var failMsg = data.online === false
-      ? "联网翻译已关闭（设置里可打开），下方是句中生词释义"
-      : "翻译不可用：联网翻译没连上。国内网络建议在设置里填百度翻译的 APP ID 和密钥";
-    document.getElementById("trans").innerHTML =
-      data.loading ? '<span class="spin"></span>翻译中…' : esc(data.translated || failMsg);
-    document.getElementById("src").textContent = data.source ? " · 来源：" + data.source : "";
-
-    var words = data.words || [];
-    var box = document.getElementById("words");
-    if (!words.length) {
-      box.innerHTML = '<div class="empty">句子里没有生词（常用词已略过）</div>';
-      return;
+  WW.render = function (d) {
+    data = d || {};
+    if (d.prefs) WW.setPrefs(d.prefs);
+    $("src").value = d.original || "";
+    var dst = $("dst");
+    if (d.loading) { dst.className = "loading"; dst.textContent = "翻译中…"; $("srcName").textContent = ""; }
+    else if (d.translated) { dst.className = ""; dst.textContent = d.translated; $("srcName").textContent = d.source ? "来自 " + d.source : ""; }
+    else {
+      dst.className = "loading";
+      dst.textContent = d.online === false ? "联网翻译已关闭（设置里可以打开），下面是句中生词" : "翻译失败：网络连不上翻译服务。可以在设置里填百度翻译的密钥";
+      $("srcName").textContent = "";
     }
-    var html = "";
-    words.forEach(function (item, i) {
-      html += '<div class="w-item">' +
-        '<div class="w-head" onclick="toggle(' + i + ')">' +
-          '<span class="w-word">' + esc(item.word) + (item.saved ? ' <span title="在生词本里">★</span>' : '') + '</span>' +
-          '<span class="w-brief">' + esc(item.brief) + '</span>' +
-        '</div>' +
-        '<div class="w-body" id="wb' + i + '">' + (item.html || "") + '</div>' +
-      '</div>';
-    });
-    box.innerHTML = html;
+    var words = d.words || [];
+    var box = $("words");
+    if (!words.length || d.loading) { box.style.display = "none"; return; }
+    box.style.display = "";
+    box.innerHTML = '<div class="label">句中生词（常用词已略过）</div>' + words.map(function (w, i) {
+      return '<div class="row"><button class="icon-btn gold' + (w.saved ? " on" : "") + '" data-star="' + i + '" title="收进生词本">' +
+        WW.icon("star", w.saved) + '</button><span class="w" data-look="' + WW.esc(w.word) + '">' + WW.esc(w.word) +
+        '</span><span class="b" title="' + WW.esc(w.brief) + '">' + WW.esc(w.brief) + '</span>' +
+        '<button class="icon-btn" data-say="' + WW.esc(w.word) + '" title="发音">' + WW.icon("volume") + "</button></div>";
+    }).join("");
   };
 
-  function toggle(i) {
-    var el = document.getElementById("wb" + i);
-    if (!el) return;
-    if (el.style.display === "block") { el.style.display = "none"; return; }
-    el.style.display = "block";
-    if (!el.dataset.loaded) {
-      el.dataset.loaded = "1";
-      el.innerHTML = '<span class="spin"></span>查询中…';
-      window.pywebview.api.word_detail(window.__words[i]).then(function (entries) {
-        if (!entries || !entries.length) { el.innerHTML = "没有找到释义"; return; }
-        WW.render(el, entries, { onEntry: function (w) { window.pywebview.api.open_lookup(w); } });
+  function retranslate() { var t = $("src").value.trim(); if (t) WW.api().translate_text(t); }
+  $("goBtn").addEventListener("click", retranslate);
+  $("src").addEventListener("keydown", function (e) { if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); retranslate(); } });
+  $("sayBtn").addEventListener("click", function (e) { WW.say($("src").value, null, e.currentTarget); });
+  $("copyBtn").addEventListener("click", function () { if (data.translated) { WW.api().copy(data.translated); WW.toast("已复制译文"); } });
+  $("words").addEventListener("click", function (e) {
+    var t = e.target.closest("[data-star],[data-look],[data-say]"); if (!t) return;
+    if (t.hasAttribute("data-say")) WW.say(t.getAttribute("data-say"), null, t);
+    else if (t.hasAttribute("data-look")) WW.api().open_lookup(t.getAttribute("data-look"));
+    else {
+      var w = data.words[parseInt(t.getAttribute("data-star"), 10)];
+      WW.api().vocab_toggle(w.word, w.brief).then(function (on) {
+        w.saved = on; t.classList.toggle("on", on); t.innerHTML = WW.icon("star", on);
+        WW.toast(on ? "已收进生词本" : "已移出生词本");
       });
     }
-  }
-
-  function retranslate() {
-    if (!currentText) return;
-    document.getElementById("trans").innerHTML = '<span class="spin"></span>翻译中…';
-    window.pywebview.api.translate_text(currentText).then(function (t) {
-      currentTrans = t || "";
-      document.getElementById("trans").innerHTML = esc(t || "翻译不可用");
-    });
-  }
-
-  function copyTrans() {
-    if (currentTrans) window.pywebview.api.copy_text(currentTrans);
-  }
-
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") window.pywebview.api.close_window("translate");
   });
-
-  // 快捷键提示文字跟着设置走（改键后不用改页面）
-  window.setHotkeys = function (hk) {
-    document.querySelectorAll("[data-hk]").forEach(function (el) {
-      if (hk && hk[el.dataset.hk]) el.textContent = hk[el.dataset.hk];
-    });
-  };
-  window.addEventListener("pywebviewready", function () {
-    window.pywebview.api.get_hotkeys().then(window.setHotkeys);
-  });
+  WW.selectionTool(function (t) { WW.api().open_lookup(t); });
+  WW.boot("translate");
+})();
 </script>
 </body>
 </html>

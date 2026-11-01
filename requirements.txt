@@ -6,4 +6,13 @@ pystray>=0.19.5
 Pillow>=10.0
 requests>=2.31
 numpy>=1.26
+# Windows 自带的文字识别（取词主力）
+winrt-runtime>=2.0
+winrt-Windows.Foundation>=2.0
+winrt-Windows.Foundation.Collections>=2.0
+winrt-Windows.Globalization>=2.0
+winrt-Windows.Graphics.Imaging>=2.0
+winrt-Windows.Media.Ocr>=2.0
+winrt-Windows.Storage.Streams>=2.0
+# 兜底识别：系统文字识别用不了时才加载
 rapidocr-onnxruntime>=1.3

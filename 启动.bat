@@ -34,5 +34,5 @@ if not exist venv\Scripts\pythonw.exe (
 
 rem 配置和生词本放在 %APPDATA%\WarmWord（程序目录放 portable.txt 则放程序目录）
 
-start "" venv\Scripts\pythonw.exe app.py
+start "" venv\Scripts\pythonw.exe main.py
 exit

@@ -1,276 +1,232 @@
 <!doctype html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<title>暖词</title>
+<link rel="stylesheet" href="theme.css">
 <style>
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: linear-gradient(165deg, #faf6ee 0%, #f5eddd 100%);
-    font-family: "Microsoft YaHei", sans-serif;
-    color: #3d3229;
-  }
-  .wrap { padding: 14px 16px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
-  .title {
-    font-family: "KaiTi", "STKaiti", serif; font-size: 18px; color: #7a5c3e;
-    letter-spacing: 2px; margin-bottom: 9px; flex: none;
-  }
-  .title .deco { color: #c2a06a; font-size: 14px; margin: 0 5px; }
-  .title { display: flex; align-items: center; }
-  .title .size { margin-left: auto; display: flex; gap: 4px; }
-  .title .size .btn { font-family: "Microsoft YaHei", sans-serif; letter-spacing: 0; padding: 2px 8px; }
-  .recent { margin-top: 16px; text-align: left; }
-  .recent .lbl { font-size: 12px; color: #a08c6e; margin-bottom: 6px; display: flex; }
-  .recent .lbl a { margin-left: auto; color: #b8a585; cursor: pointer; }
-  .recent .w { display: inline-block; margin: 3px 4px; padding: 2px 10px; border-radius: 9px;
-               border: 1px solid #e2d5bb; color: #6b4a2b; cursor: pointer; font-size: 13px; }
-  .recent .w:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
-  .search-box { position: relative; flex: none; }
-  #q {
-    width: 100%; box-sizing: border-box;
-    border: 1px solid #d9c8a6; border-radius: 12px;
-    background: #fffdf7; padding: 10px 13px; font-size: 15px;
-    color: #3d3229; outline: none;
-  }
-  #q:focus { border-color: #b06a3f; }
-  .suggest {
-    position: absolute; z-index: 9; left: 0; right: 0; top: 43px;
-    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 10px;
-    box-shadow: 0 8px 20px rgba(110, 88, 56, .16); overflow: hidden;
-        max-height: 240px; overflow-y: auto;
-  }
-  .suggest div { padding: 7px 13px; font-size: 13px; cursor: pointer; color: #5a4a36; }
-  .suggest div:hover, .suggest div.on { background: #f3e8d2; }
-  .dym { margin-top: 14px; }
-  .dym a { display: inline-block; margin: 4px 5px; padding: 3px 11px; border-radius: 9px;
-           border: 1px solid #d9c8a6; color: #8a6a45; cursor: pointer; text-decoration: none; }
-  .dym a:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
-  .body {
-    margin-top: 10px; flex: 1; overflow-y: auto;
-    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 14px;
-    padding: 11px 14px;
-  }
-  .body::-webkit-scrollbar { width: 7px; }
-  .body::-webkit-scrollbar-thumb { background: #d8cbb2; border-radius: 4px; }
-  .entry { padding: 8px 2px; border-bottom: 1px dashed #d8cbb2; }
-  .entry:last-child { border-bottom: none; }
-  .dict-name {
-    display: inline-block; font-size: 11px; color: #fff; background: #a9895f;
-    border-radius: 8px; padding: 1px 9px; margin-bottom: 5px;
-    font-family: "KaiTi", serif; letter-spacing: 1px;
-  }
-  .def-body { font-size: 14.5px; line-height: 1.9; color: #3f342a; word-break: break-word; }
-  .def-body b, .def-body strong { color: #b06a3f; font-weight: 600; }
-  .def-body i, .def-body em { color: #8a7a66; }
-  .def-body .cn { color: #8a5a2b; }
-  .def-body .phon { color: #9c8b72; font-style: italic; font-size: .94em; letter-spacing: .3px; }
-  .def-body .pos {
-    display: inline-block; background: #b06a3f; color: #fff;
-    border-radius: 8px; padding: 0 8px; font-size: 12px; line-height: 1.6; margin-right: 4px;
-  }
-  .def-body .num {
-    display: inline-block; background: #f0e4cf; color: #8a5a2b;
-    border-radius: 7px; padding: 0 7px; font-size: 12.5px; font-weight: 600;
-  }
-  .word-head {
-    font-family: "KaiTi", serif; font-size: 24px; color: #6b4a2b;
-    margin: 0 0 8px; display: flex; align-items: center; gap: 8px;
-  }
-  .word-head .btn { font-family: "Microsoft YaHei", sans-serif; }
-  .empty { color: #a08c6e; text-align: center; padding: 40px 10px; font-size: 13px; }
-  .btn {
-    border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45;
-    border-radius: 9px; padding: 3px 10px; font-size: 12px; cursor: pointer;
-  }
-  .btn:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
-  .hint {
-    flex: none; margin-top: 7px; font-size: 11px; color: #a08c6e;
-    font-family: "KaiTi", serif; letter-spacing: .5px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
+  html, body { height: 100%; overflow: hidden; }
+  #app { height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+  header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .search { flex: 1; position: relative; display: flex; align-items: center; }
+  .search svg.i { position: absolute; left: 11px; color: var(--text-3); width: 17px; height: 17px; pointer-events: none; }
+  .search input { width: 100%; height: 38px; padding: 0 36px 0 36px; font-size: 15px; border-radius: 9px; background: var(--surface); border-color: transparent; }
+  .search input:focus { background: var(--bg); }
+  .search .clear { position: absolute; right: 5px; }
+  main { display: grid; grid-template-columns: 210px 1fr; min-height: 0; }
+  aside { border-right: 1px solid var(--border); overflow-y: auto; padding: 8px 6px; }
+  aside .title { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-3); padding: 4px 8px 6px; }
+  aside .title a { font-size: 12px; color: var(--text-3); }
+  aside .item { display: block; width: 100%; text-align: left; border: 0; background: transparent; cursor: pointer;
+    padding: 5px 10px; border-radius: 6px; font-size: 13.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  aside .item:hover { background: var(--hover); }
+  aside .item.on { background: var(--accent-soft); color: var(--accent-text); }
+  #content { overflow-y: auto; min-width: 0; position: relative; }
+  #jump { position: sticky; top: 0; z-index: 2; display: flex; gap: 4px; padding: 8px 22px; background: var(--bg);
+    border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+  #jump:empty { display: none; }
+  #jump button { border: 0; background: var(--surface); color: var(--text-2); padding: 3px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  #jump button:hover { color: var(--text); background: var(--surface-2); }
+  .block { padding: 18px 22px; }
+  .block + .block { border-top: 1px solid var(--border); }
+  #cardBox .wc-word { font-size: calc(30px * var(--scale)); }
+  .dict-name { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-2);
+    margin: 0 0 10px; letter-spacing: .02em; }
+  .dict-name::before { content: ""; width: 3px; height: 13px; border-radius: 2px; background: var(--accent); }
+  .welcome { padding: 60px 30px; text-align: center; color: var(--text-3); }
+  .welcome .big { font: 600 22px var(--font-display); color: var(--text); margin-bottom: 8px; }
+  .welcome kbd { font: 12px var(--font); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-2); background: var(--surface); color: var(--text-2); }
+  .dym { margin-top: 12px; color: var(--text-2); }
+  .dym a { display: inline-block; margin: 4px 12px 0 0; font-size: 15px; }
+  .zoom { display: inline-flex; align-items: center; }
 </style>
-<!--WW_COMMON-->
 </head>
 <body>
-<div class="wrap">
-  <div class="title"><span class="deco">✿</span>暖词 · 快捷查词<span class="deco">✎</span>
-    <span class="size"><button class="btn" onclick="zoom(-0.1)" title="释义字号缩小">A−</button><button class="btn" onclick="zoom(0.1)" title="释义字号放大">A+</button></span></div>
-  <div class="search-box">
-    <input id="q" placeholder="输入单词或中文，回车查词…" autocomplete="off" spellcheck="false">
-    <div class="suggest" id="suggest" style="display:none"></div>
-  </div>
-  <div class="body" id="body">
-    <div class="empty">输入单词开始查词<br><br>—— 词典在手，慢慢探索 ——<div class="recent" id="recent"></div></div>
-  </div>
-  <div class="hint">↑↓ 选补全 · Esc 关闭　·　<span data-hk="translate">Ctrl+Alt+T</span> 翻译选中　·　<span data-hk="capture">Ctrl+Alt+E</span> 取词　·　变形自动回溯</div>
+<div id="app">
+  <header>
+    <div class="search">
+      <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+      <input id="q" type="text" placeholder="查单词或中文" autocomplete="off" spellcheck="false">
+      <button class="icon-btn clear" id="clear" title="清空" style="display:none"></button>
+    </div>
+    <span class="zoom">
+      <button class="icon-btn" id="zoomOut" title="字号减小"></button>
+      <button class="icon-btn" id="zoomIn" title="字号增大"></button>
+    </span>
+    <button class="icon-btn" id="vocabBtn" title="生词本"></button>
+    <button class="icon-btn" id="setBtn" title="设置"></button>
+  </header>
+  <main>
+    <aside id="side"></aside>
+    <section id="content"><div id="jump"></div><div id="body"></div></section>
+  </main>
 </div>
+<script src="common.js"></script>
 <script>
-  var timer = null, currentWord = "", seq = 0, active = -1, suggestWords = [];
-  var q = document.getElementById("q");
-  var suggestBox = document.getElementById("suggest");
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var q = $("q"), side = $("side"), body = $("body"), jump = $("jump");
+  var current = null, sugg = [], sel = -1, timer = null, autoTimer = null, saved = false;
+  $("clear").innerHTML = WW.icon("x");
+  $("zoomOut").innerHTML = WW.icon("minus");
+  $("zoomIn").innerHTML = WW.icon("plus");
+  $("vocabBtn").innerHTML = WW.icon("book");
+  $("setBtn").innerHTML = WW.icon("settings");
+
+  function welcome() {
+    jump.innerHTML = "";
+    var hk = WW.prefs.hotkeys || {}, mod = WW.prefs.modifier || "Shift";
+    body.innerHTML = '<div class="welcome"><div class="big">查点什么？</div>' +
+      "<div>输入英文或中文，回车查询；↑↓ 选择联想词</div>" +
+      '<div style="margin-top:14px">按住 <kbd>' + WW.esc(mod) + "</kbd> 指向屏幕上的英文单词即可取词 · " +
+      "选中文字后 <kbd>" + WW.esc(hk.translate || "") + "</kbd> 翻译</div></div>";
+  }
+
+  function renderSide(list, title, isHistory) {
+    sugg = list || []; sel = -1;
+    if (!sugg.length) {
+      side.innerHTML = '<div class="title">' + WW.esc(title) + '</div><div class="empty" style="padding:4px 10px">' +
+        (isHistory ? "还没有查词记录" : "没有联想词") + "</div>";
+      return;
+    }
+    side.innerHTML = '<div class="title"><span>' + WW.esc(title) + "</span>" +
+      (isHistory ? '<a id="clearHist">清空</a>' : "") + "</div>" +
+      sugg.map(function (w, i) {
+        var on = current && current.card && current.card.word && current.card.word.toLowerCase() === w.toLowerCase();
+        return '<button class="item' + (on ? " on" : "") + '" data-i="' + i + '">' + WW.esc(w) + "</button>";
+      }).join("");
+  }
+  function showHistory() { WW.api().recent().then(function (r) { renderSide(r, "最近查过", true); }); }
+  function markSel() {
+    side.querySelectorAll(".item").forEach(function (el, i) { el.classList.toggle("on", i === sel); });
+    var el = side.querySelector(".item.on"); if (el) el.scrollIntoView({ block: "nearest" });
+  }
+
+  function actions() {
+    return '<button class="icon-btn gold' + (saved ? " on" : "") + '" data-act="star" title="' + (saved ? "移出生词本" : "收进生词本") + '">' +
+      WW.icon("star", saved) + "</button>" +
+      '<button class="icon-btn" data-act="copy" title="复制单词">' + WW.icon("copy") + "</button>";
+  }
+
+  function render(r) {
+    current = r;
+    saved = !!r.saved;
+    var card = r.card;
+    if (!card) { body.innerHTML = '<div class="welcome">' + WW.esc(r.status || "") + "</div>"; jump.innerHTML = ""; return; }
+    var h = '<article class="block" id="cardBox">' + WW.card(card, { actions: actions(), english: true });
+    if (!card.found) {
+      h += '<div class="dym">词典里没有「' + WW.esc(r.query) + "」";
+      if ((r.did_you_mean || []).length) {
+        h += "，你要找的是不是：<div>" + r.did_you_mean.map(function (w) {
+          return '<a data-act="word" data-word="' + WW.esc(w) + '">' + WW.esc(w) + "</a>";
+        }).join("") + "</div>";
+      }
+      h += "</div>";
+    }
+    h += "</article>";
+    (r.entries || []).forEach(function (e, i) {
+      h += '<article class="block" id="d' + i + '"><div class="dict-name">' + WW.esc(e.name) + '</div><div class="rich-host" id="rh' + i + '"></div></article>';
+    });
+    body.innerHTML = h;
+    (r.entries || []).forEach(function (e, i) {
+      WW.rich($("rh" + i), e, { word: search, headword: card.word });
+    });
+    var chips = (r.entries || []).length ? ['<button data-jump="cardBox">简明</button>'].concat(
+      r.entries.map(function (e, i) { return '<button data-jump="d' + i + '">' + WW.esc(e.name) + "</button>"; })) : [];
+    jump.innerHTML = chips.join("");
+    $("content").scrollTop = 0;
+  }
+
+  function search(word, record) {
+    word = String(word || "").trim();
+    if (!word) return;
+    if (q.value.trim() !== word) q.value = word;
+    $("clear").style.display = "";
+    WW.api().search(word, record !== false).then(function (r) {
+      render(r);
+      if (side.querySelector(".title span") && side.querySelector(".title span").textContent === "最近查过") showHistory();
+      else markCurrent();
+    });
+  }
+  function markCurrent() {
+    var w = current && current.card && current.card.word;
+    side.querySelectorAll(".item").forEach(function (el) {
+      el.classList.toggle("on", !!w && el.textContent.toLowerCase() === w.toLowerCase());
+    });
+  }
 
   q.addEventListener("input", function () {
-    clearTimeout(timer);
-    timer = setTimeout(doSearch, 220);
+    var v = q.value.trim();
+    $("clear").style.display = v ? "" : "none";
+    clearTimeout(timer); clearTimeout(autoTimer);
+    if (!v) { showHistory(); return; }
+    timer = setTimeout(function () {
+      WW.api().suggest(v).then(function (list) { renderSide(list, "联想", false); markCurrent(); });
+    }, 60);
+    autoTimer = setTimeout(function () { search(v, false); }, 320);  // 输入即查（不记入历史）
   });
   q.addEventListener("keydown", function (e) {
-    var open = suggestBox.style.display === "block" && suggestWords.length;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      if (!open) return;
+      if (!sugg.length) return;
       e.preventDefault();
-      var n = suggestWords.length;
-      active = e.key === "ArrowDown" ? (active + 1) % n : (active - 1 + n) % n;
-      highlight();
-      return;
-    }
-    if (e.key === "Enter") {
-      clearTimeout(timer);
-      if (open && active >= 0) { pickSuggest(suggestWords[active]); return; }
-      hideSuggest();
-      doSearch(true, true);
-    }
-    if (e.key === "Escape") {
-      if (open) { hideSuggest(); return; }  // 先收起补全，再按一次 Esc 关窗
-      window.pywebview.api.close_window("lookup");
+      sel = (sel + (e.key === "ArrowDown" ? 1 : -1) + sugg.length) % sugg.length;
+      markSel();
+      q.value = sugg[sel];
+      clearTimeout(autoTimer);
+      autoTimer = setTimeout(function () { search(sugg[sel], false); }, 120);
+    } else if (e.key === "Enter") {
+      e.preventDefault(); clearTimeout(autoTimer);
+      search(q.value, true);
+      q.select();
+    } else if (e.key === "Escape" && q.value) {
+      e.preventDefault(); q.value = ""; $("clear").style.display = "none"; showHistory();
     }
   });
-  document.addEventListener("click", function (e) {
-    if (!e.target.closest || !e.target.closest(".search-box")) hideSuggest();
+  $("clear").addEventListener("click", function () { q.value = ""; $("clear").style.display = "none"; q.focus(); showHistory(); });
+  side.addEventListener("click", function (e) {
+    if (e.target.id === "clearHist") { WW.api().clear_history().then(showHistory); return; }
+    var b = e.target.closest(".item"); if (b) search(sugg[parseInt(b.getAttribute("data-i"), 10)], true);
   });
-
-  function esc(s) {
-    return (s || "").replace(/[&<>]/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
-    });
-  }
-  function hideSuggest() { suggestBox.style.display = "none"; active = -1; }
-  function highlight() {
-    Array.prototype.forEach.call(suggestBox.children, function (el, i) {
-      el.classList.toggle("on", i === active);
-    });
-  }
-
-  // record=true：明确查的词（回车、选补全、点链接）才记进历史，打字过程中的半截词不记
-  function doSearch(noSuggest, record) {
-    var w = q.value.trim();
-    var my = ++seq;  // 打字快时旧请求可能后回来，只认最新一次
-    if (!w) { hideSuggest(); showRecent(); return; }
-    window.pywebview.api.search(w, record === true).then(function (data) {
-      if (my === seq) renderLookup(data);
-    });
-    if (noSuggest === true) return;
-    window.pywebview.api.suggest(w).then(function (words) {
-      if (my !== seq) return;
-      suggestWords = words || [];
-      active = -1;
-      if (!suggestWords.length || (suggestWords.length === 1 && suggestWords[0] === w.toLowerCase())) {
-        hideSuggest();
-        return;
-      }
-      var html = "";
-      suggestWords.forEach(function (x, i) {
-        html += '<div data-i="' + i + '">' + esc(x) + '</div>';
+  jump.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-jump]"); if (!b) return;
+    var el = $(b.getAttribute("data-jump"));
+    $("content").scrollTo({ top: el.offsetTop - jump.offsetHeight, behavior: "smooth" });
+  });
+  body.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-act]"); if (!t || !current) return;
+    var act = t.getAttribute("data-act"), word = (current.card && current.card.word) || current.query;
+    if (act === "say") WW.say(word, t.getAttribute("data-accent"), t);
+    else if (act === "word") search(t.getAttribute("data-word"), true);
+    else if (act === "copy") { WW.api().copy(word); WW.toast("已复制 " + word); }
+    else if (act === "star") {
+      var brief = ((current.card && current.card.senses) || []).slice(0, 3).map(function (s) { return (s.pos + " " + s.text).trim(); }).join("；");
+      WW.api().vocab_toggle(word, brief).then(function (on) {
+        saved = on; current.saved = on;
+        var c = t.closest(".wc-actions"); if (c) c.innerHTML = actions();
+        WW.toast(on ? "已收进生词本" : "已移出生词本");
       });
-      suggestBox.innerHTML = html;
-      suggestBox.style.display = "block";
-    });
-  }
-  suggestBox.addEventListener("click", function (e) {
-    var el = e.target.closest && e.target.closest("[data-i]");
-    if (el) pickSuggest(suggestWords[+el.dataset.i]);
-  });
-
-  function pickSuggest(w) {
-    q.value = w;
-    hideSuggest();
-    clearTimeout(timer);
-    doSearch(true, true);
-  }
-  window.lookupWord = pickSuggest;
-
-  function showRecent() {
-    var body = document.getElementById("body");
-    body.innerHTML = '<div class="empty">输入单词开始查词<br><br>—— 词典在手，慢慢探索 ——<div class="recent" id="recent"></div></div>';
-    window.pywebview.api.recent().then(function (words) {
-      var box = document.getElementById("recent");
-      if (!box || !words || !words.length) return;
-      var html = '<div class="lbl">最近查过<a onclick="clearRecent()">清空</a></div>';
-      words.forEach(function (w) {
-        html += '<span class="w" data-w="' + esc(w).replace(/"/g, "&quot;") + '">' + esc(w) + '</span>';
-      });
-      box.innerHTML = html;
-    });
-  }
-  window.clearRecent = function () {
-    window.pywebview.api.clear_history().then(showRecent);
-  };
-  window.zoom = function (d) {
-    var v = Math.round(((WW.prefs.font_scale || 1) + d) * 10) / 10;
-    window.pywebview.api.set_font_scale(v).then(WW.setPrefs);
-  };
-  window.addEventListener("pywebviewready", showRecent);
-
-  window.renderLookup = function (data) {
-    currentWord = data.word || "";
-    var body = document.getElementById("body");
-    if (data.word && q.value.trim() !== data.word) q.value = data.word;
-    if (!data.entries || !data.entries.length) {
-      var html = '<div class="empty">「' + esc(data.word) + '」没有找到释义';
-      if (data.status) {
-        html += '<br><br>' + esc(data.status);
-      } else if (data.did_you_mean && data.did_you_mean.length) {
-        html += '<div class="dym">你要找的是不是：<br>';
-        data.did_you_mean.forEach(function (x) {
-          html += '<a data-w="' + esc(x).replace(/"/g, "&quot;") + '">' + esc(x) + '</a>';
-        });
-        html += '</div>';
-      } else {
-        html += '<br><br>换个词试试？';
-      }
-      body.innerHTML = html + '</div>';
-      return;
     }
-    var head = '<div class="word-head">' + esc(data.word) +
-      '<button class="btn" onclick="speak(\'uk\')">英</button>' +
-      '<button class="btn" onclick="speak(\'us\')">美</button>' +
-      '<button class="btn" id="vbtn" onclick="addVocabWord()">收藏</button></div>';
-    body.innerHTML = head + '<div id="entries"></div>';
-    // 词典原版排版；多本词典时顶部可跳转；双击释义里的词 / 点词条链接直接在这里查
-    WW.render(document.getElementById("entries"), data.entries, { nav: true, onEntry: pickSuggest });
-    document.body.scrollTop = 0;
-    body.scrollTop = 0;
-  };
-  document.getElementById("body").addEventListener("click", function (e) {
-    var a = e.target.closest && e.target.closest(".dym a, .recent .w");
-    if (a) pickSuggest(a.dataset.w);
   });
-
-  function speak(accent) {
-    if (currentWord) window.pywebview.api.speak(currentWord, accent);
+  function zoom(d) {
+    var s = Math.round(((WW.prefs.font_scale || 1) + d) * 10) / 10;
+    s = Math.max(0.8, Math.min(1.6, s));
+    WW.api().set_font_scale(s).then(WW.setPrefs);
   }
+  $("zoomOut").addEventListener("click", function () { zoom(-0.1); });
+  $("zoomIn").addEventListener("click", function () { zoom(0.1); });
+  $("vocabBtn").addEventListener("click", function () { WW.api().open_vocab(); });
+  $("setBtn").addEventListener("click", function () { WW.api().open_settings(); });
+  WW.selectionTool(function (t) { search(t, true); });
 
-  function addVocabWord() {
-    if (!currentWord) return;
-    window.pywebview.api.add_vocab(currentWord).then(function (ok) {
-      var b = document.getElementById("vbtn");
-      if (!b) return;
-      b.textContent = ok ? "已收藏" : "已存在";
-      b.style.background = ok ? "#6a8f6b" : "#c9b79a";
-      b.style.color = "#fff";
-      setTimeout(function () { b.textContent = "收藏"; b.style.background = ""; b.style.color = ""; }, 1600);
-    });
-  }
-
-  window.focusSearch = function () { q.focus(); q.select(); };
-
-  // 快捷键提示文字跟着设置走（改键后不用改页面）
-  window.setHotkeys = function (hk) {
-    document.querySelectorAll("[data-hk]").forEach(function (el) {
-      if (hk && hk[el.dataset.hk]) el.textContent = hk[el.dataset.hk];
-    });
+  WW.open = function (d) {
+    d = d || {};
+    if (d.prefs) WW.setPrefs(d.prefs);
+    setTimeout(function () { q.focus(); q.select(); }, 30);
+    if (d.word) search(d.word, true);
+    else if (!current) { welcome(); showHistory(); }
   };
-  window.addEventListener("pywebviewready", function () {
-    window.pywebview.api.get_hotkeys().then(window.setHotkeys);
-  });
+  WW.boot("lookup", function () { if (!current) { welcome(); showHistory(); } q.focus(); });
+})();
 </script>
 </body>
 </html>

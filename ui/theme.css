@@ -1,0 +1,166 @@
+/* 暖词 · 界面样式（所有窗口共用）
+ * 颜色都定义成变量：浅色 / 深色跟随系统，也可以在设置里固定。
+ */
+:root {
+  --bg: #ffffff;
+  --surface: #f5f6f8;
+  --surface-2: #eceef1;
+  --hover: rgba(15, 23, 42, .055);
+  --text: #1c1f24;
+  --text-2: #5b616b;
+  --text-3: #8a9099;
+  --border: #e3e6ea;
+  --border-2: #d3d7dd;
+  --accent: #2563eb;
+  --accent-text: #1d4fd7;
+  --accent-soft: #edf3ff;
+  --accent-ring: rgba(37, 99, 235, .28);
+  --gold: #b7791f;
+  --gold-soft: #fdf5e6;
+  --danger: #d14343;
+  --ok: #1f8a4c;
+  --shadow: 0 10px 30px rgba(15, 23, 42, .12), 0 2px 6px rgba(15, 23, 42, .06);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --scale: 1;
+  --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-phon: "Segoe UI", "Lucida Sans Unicode", "Arial Unicode MS", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1d1e21; --surface: #26282c; --surface-2: #2f3136; --hover: rgba(255, 255, 255, .06);
+    --text: #e7e8ea; --text-2: #a6abb3; --text-3: #7d828a; --border: #34363b; --border-2: #44474d;
+    --accent: #6b9bff; --accent-text: #8fb3ff; --accent-soft: #1f2b45; --accent-ring: rgba(107, 155, 255, .35);
+    --gold: #e0b45a; --gold-soft: #3a3020; --danger: #ef6b6b; --ok: #4cc27e;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1d1e21; --surface: #26282c; --surface-2: #2f3136; --hover: rgba(255, 255, 255, .06);
+  --text: #e7e8ea; --text-2: #a6abb3; --text-3: #7d828a; --border: #34363b; --border-2: #44474d;
+  --accent: #6b9bff; --accent-text: #8fb3ff; --accent-soft: #1f2b45; --accent-ring: rgba(107, 155, 255, .35);
+  --gold: #e0b45a; --gold-soft: #3a3020; --danger: #ef6b6b; --ok: #4cc27e;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .3);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.6 var(--font);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+::selection { background: var(--accent-ring); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 10px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+::-webkit-scrollbar-track { background: transparent; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent-text); text-decoration: none; cursor: pointer; }
+a:hover { text-decoration: underline; }
+svg.i { width: 16px; height: 16px; flex: none; display: block; }
+.sel { user-select: text; }
+
+/* ---------- 按钮 ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-2); background: var(--bg);
+  cursor: pointer; white-space: nowrap; font-size: 13px;
+}
+.btn:hover { background: var(--hover); }
+.btn:active { transform: translateY(.5px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.danger { color: var(--danger); }
+.btn:disabled { opacity: .55; cursor: default; }
+.icon-btn {
+  width: 28px; height: 28px; display: inline-grid; place-items: center; flex: none;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-2); cursor: pointer;
+}
+.icon-btn:hover { background: var(--hover); color: var(--text); }
+.icon-btn.on { color: var(--accent); }
+.icon-btn.gold.on { color: var(--gold); }
+
+/* ---------- 单词卡片（浮窗和查词窗共用） ---------- */
+.wc-head { display: flex; align-items: flex-start; gap: 6px; }
+.wc-word {
+  flex: 1; min-width: 0; font: 600 calc(24px * var(--scale))/1.2 var(--font-display);
+  letter-spacing: -.01em; overflow-wrap: anywhere; user-select: text;
+}
+.wc-actions { display: flex; gap: 2px; margin: -2px -6px 0 0; }
+.wc-phon { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; color: var(--text-2); font-size: 13px; }
+.wc-phon .ph { display: inline-flex; align-items: center; gap: 4px; }
+.wc-phon .lab { color: var(--text-3); font-size: 12px; }
+.wc-phon .ipa { font-family: var(--font-phon); user-select: text; }
+.say {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 0;
+}
+.say:hover { background: var(--accent-soft); }
+.say svg.i { width: 15px; height: 15px; }
+.say.playing { animation: ww-pulse .6s ease 2; }
+@keyframes ww-pulse { 50% { opacity: .35; } }
+.wc-lemma { margin-top: 8px; font-size: 13px; color: var(--text-2); }
+.wc-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.tag {
+  font-size: 11.5px; line-height: 20px; padding: 0 7px; border-radius: 5px;
+  background: var(--surface); color: var(--text-2);
+}
+.tag.gold { background: var(--gold-soft); color: var(--gold); }
+.wc-senses { margin-top: 10px; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 3px; user-select: text; }
+.wc-senses .pos {
+  color: var(--text-3); font-size: calc(12.5px * var(--scale)); padding-top: 1px; white-space: nowrap;
+  font-style: italic;
+}
+.wc-senses .txt { font-size: calc(14.5px * var(--scale)); line-height: 1.6; }
+.wc-forms { margin-top: 9px; font-size: 12.5px; color: var(--text-3); line-height: 1.7; }
+.wc-forms a { color: var(--text-2); }
+.wc-forms a:hover { color: var(--accent-text); }
+.wc-forms .sep { margin: 0 6px; opacity: .6; }
+.wc-en { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--border); color: var(--text-2);
+  font-size: calc(13px * var(--scale)); user-select: text; }
+.wc-en .pos { color: var(--text-3); font-style: italic; margin-right: 6px; }
+.wc-note { margin-top: 8px; font-size: 12px; color: var(--text-3); }
+.empty { color: var(--text-3); font-size: 13px; }
+
+/* ---------- 词典原版排版的容器 ---------- */
+.rich-host { display: block; }
+
+/* ---------- 小提示 ---------- */
+.toast {
+  position: fixed; left: 50%; bottom: 16px; transform: translate(-50%, 8px); opacity: 0;
+  background: var(--text); color: var(--bg); padding: 6px 12px; border-radius: 8px; font-size: 12.5px;
+  pointer-events: none; transition: opacity .15s, transform .15s; z-index: 99; white-space: nowrap;
+}
+.toast.on { opacity: .92; transform: translate(-50%, 0); }
+
+/* ---------- 选中文字小工具条 ---------- */
+.seltool {
+  position: fixed; z-index: 50; display: none; gap: 2px; padding: 3px; border-radius: 8px;
+  background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.seltool.on { display: flex; }
+.seltool button { border: 0; background: transparent; padding: 3px 9px; border-radius: 5px; cursor: pointer; font-size: 12.5px; }
+.seltool button:hover { background: var(--hover); }
+
+/* ---------- 表单 ---------- */
+input[type=text], input[type=search], input[type=password], textarea, select {
+  border: 1px solid var(--border-2); background: var(--bg); border-radius: var(--radius-sm);
+  padding: 0 10px; height: 32px; outline: none; user-select: text;
+}
+textarea { padding: 8px 10px; height: auto; resize: vertical; line-height: 1.6; }
+input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.switch { position: relative; width: 36px; height: 20px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch span { position: absolute; inset: 0; background: var(--border-2); border-radius: 20px; transition: .15s; cursor: pointer; }
+.switch span::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(16px); }
+.seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--surface); gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--text-2); }
+.seg button.on { background: var(--bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 0 0 1px var(--border); }

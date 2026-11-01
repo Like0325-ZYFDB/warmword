@@ -5,7 +5,7 @@ import csv
 import pytest
 from mdict_utils import writer
 
-from dict_engine import DictEngine, inflection_candidates
+from warmword.dictionary import DictEngine, inflection_candidates
 
 
 @pytest.mark.parametrize("word, base", [
@@ -86,7 +86,8 @@ def test_ecdict_csv(tmp_path):
     assert not eng.errors and len(eng.books[0]) == 4
     hit = eng.lookup("perceived")                        # 变形词条只有 exchange，跟到原形
     assert hit and hit[0].headword == "perceive"
-    assert "察觉" in hit[0].html and "四级" in hit[0].html and "<br>" not in hit[0].html
+    assert hit[0].kind == "ecdict" and "察觉" in hit[0].data["translation"]
+    assert "cet4" in hit[0].data["tag"]
     assert eng.lookup("perceives")[0].headword == "perceive"
     assert eng.suggest("per") == ["perch", "perceive", "perceived"]
     assert eng.fuzzy("percieve", max_dist=2)[0] == "perceive"

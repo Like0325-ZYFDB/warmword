@@ -1,202 +1,147 @@
 <!doctype html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<title>暖词 · 取词</title>
+<link rel="stylesheet" href="theme.css">
 <style>
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: #faf6ee;
-    font-family: "Microsoft YaHei", sans-serif;
-    overflow: hidden;
-    color: #3d3229;
+  html, body { height: 100%; overflow: hidden; background: var(--bg); }
+  body { box-shadow: inset 0 0 0 1px var(--border); border-radius: 8px; }
+  #wrap { height: 100vh; display: flex; flex-direction: column; }
+  #scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+  #card { padding: 14px 16px 12px; }
+  #rich { padding: 12px 16px 14px; }
+  .hidden { display: none !important; }
+  #tabs {
+    flex: none; display: flex; align-items: center; gap: 2px; padding: 5px 8px;
+    border-top: 1px solid var(--border); background: var(--bg); overflow-x: auto; scrollbar-width: none;
   }
-  .card {
-    height: 100%; box-sizing: border-box;
-    display: flex; flex-direction: column;
-    padding: 12px 14px 8px;
-    background: linear-gradient(160deg, #fffdf7 0%, #faf4e8 100%);
-    overflow: hidden;
+  #tabs::-webkit-scrollbar { display: none; }
+  #tabs button {
+    border: 0; background: transparent; color: var(--text-2); font-size: 12px; padding: 3px 9px;
+    border-radius: 6px; cursor: pointer; white-space: nowrap;
   }
-  .head { display: flex; align-items: baseline; gap: 8px; flex: none; }
-  .word {
-    font-family: "KaiTi", "STKaiti", serif;
-    font-size: 22px; font-weight: 700; color: #6b4a2b;
-    line-height: 1.2; word-break: break-all;
-  }
-  .status { font-size: 11px; color: #a08c6e; }
-  .toolbar { margin-left: auto; display: flex; gap: 5px; flex: none; }
-  .btn {
-    border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45;
-    border-radius: 9px; padding: 3px 9px; font-size: 12px; cursor: pointer;
-    font-family: "Microsoft YaHei", sans-serif;
-  }
-  .btn:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
-  .inner {
-    flex: 1; overflow-y: auto; margin-top: 8px;
-    font-size: 13px; line-height: 1.7;
-  }
-  .inner::-webkit-scrollbar { width: 6px; }
-  .inner::-webkit-scrollbar-thumb { background: #d8cbb2; border-radius: 3px; }
-  .entry { padding: 6px 1px; border-bottom: 1px dashed #d8cbb2; }
-  .entry:last-child { border-bottom: none; }
-  .dict-name {
-    display: inline-block; font-size: 11px; color: #fff; background: #a9895f;
-    border-radius: 8px; padding: 1px 8px; margin-bottom: 4px;
-    font-family: "KaiTi", serif; letter-spacing: 1px;
-  }
-  .def-body { font-size: 14px; color: #3f342a; word-break: break-word; line-height: 1.9; }
-  .def-body b, .def-body strong { color: #b06a3f; font-weight: 600; }
-  .def-body i, .def-body em { color: #8a7a66; }
-  .def-body .cn { color: #8a5a2b; }               /* 中文释义：暖棕，一眼分开 */
-  .def-body .phon { color: #9c8b72; font-style: italic; font-size: .94em; letter-spacing: .3px; }
-  .def-body .pos {
-    display: inline-block; background: #b06a3f; color: #fff;
-    border-radius: 8px; padding: 0 8px; font-size: 12px; line-height: 1.6;
-    margin-right: 4px;
-  }
-  .def-body .num {
-    display: inline-block; background: #f0e4cf; color: #8a5a2b;
-    border-radius: 7px; padding: 0 7px; font-size: 12.5px; font-weight: 600;
-  }
-  .empty { color: #a08c6e; font-size: 13px; padding: 16px 6px; text-align: center; }
-  .foot {
-    flex: none; margin-top: 6px; padding-top: 5px; border-top: 1px dashed #d8cbb2;
-    display: flex; align-items: center; gap: 8px;
-    font-size: 11px; color: #a08c6e;
-  }
-  .foot .deco { font-family: "KaiTi", serif; color: #c2a06a; }
-  .spin {
-    display: inline-block; width: 12px; height: 12px; margin-right: 6px;
-    border: 2px solid #e2d5bb; border-top-color: #b06a3f; border-radius: 50%;
-    animation: r 1s linear infinite; vertical-align: -2px;
-  }
-  @keyframes r { to { transform: rotate(360deg); } }
+  #tabs button:hover { background: var(--hover); color: var(--text); }
+  #tabs button.on { background: var(--surface); color: var(--text); font-weight: 600; }
+  #tabs .grow { flex: 1; }
+  #tabs .hint { font-size: 11px; color: var(--text-3); padding: 0 4px; white-space: nowrap; }
+  .notfound { margin-top: 8px; color: var(--text-2); font-size: 13px; }
+  .notfound a { margin-right: 10px; }
 </style>
-<!--WW_COMMON-->
 </head>
 <body>
-<div class="card">
-  <div class="head" id="head">
-    <span class="word" id="word">…</span>
-    <span class="status" id="status"></span>
-    <span class="toolbar">
-      <button class="btn" onclick="speak('uk')" title="英式发音">英</button>
-      <button class="btn" onclick="speak('us')" title="美式发音">美</button>
-      <button class="btn" id="vocabbtn" onclick="addVocab()" title="收进生词本">收藏</button>
-      <button class="btn" id="pinbtn" onclick="togglePin()" title="钉住不自动消失">钉住</button>
-      <button class="btn" onclick="openLookup()">详情</button>
-      <button class="btn" onclick="closeMe()">关闭</button>
-    </span>
+<div id="wrap">
+  <div id="scroll">
+    <div id="card"></div>
+    <div id="rich" class="hidden"><div class="rich-host" id="richHost"></div></div>
   </div>
-  <div class="inner" id="inner"><div class="empty"><span class="spin"></span>正在取词…</div></div>
-  <div class="foot" id="foot"><span class="deco">✿</span><span><span data-hk="lookup">Ctrl+Alt+D</span> 查词 · <span data-hk="capture">Ctrl+Alt+E</span> 取词 · 「钉住」保留</span>
-    <span style="margin-left:auto" class="deco">✎</span></div>
+  <div id="tabs" class="hidden"></div>
 </div>
+<script src="common.js"></script>
 <script>
-  var currentWord = "";
-  var fitTimer = null;
+(function () {
+  var data = null, tab = -1, pinned = false, saved = false;
+  var $ = function (id) { return document.getElementById(id); };
 
-  function esc(s) {
-    return (s || "").replace(/[&<>]/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
-    });
+  function actions() {
+    return '<button class="icon-btn' + (pinned ? " on" : "") + '" data-act="pin" title="钉住（不自动收起）">' + WW.icon("pin") + "</button>" +
+      '<button class="icon-btn gold' + (saved ? " on" : "") + '" data-act="star" title="' + (saved ? "移出生词本" : "收进生词本") + '">' + WW.icon("star", saved) + "</button>" +
+      '<button class="icon-btn" data-act="open" title="在查词窗里看完整释义">' + WW.icon("open") + "</button>";
   }
 
-  function fitHeight() {
-    clearTimeout(fitTimer);
-    fitTimer = setTimeout(function () {
-      var inner = document.getElementById("inner");
-      var head = document.getElementById("head");
-      var foot = document.getElementById("foot");
-      var h = inner.scrollHeight + head.offsetHeight + foot.offsetHeight + 44;
-      window.pywebview.api.resize_float(h);
-    }, 80);
+  function naturalHeight() {
+    var tabs = $("tabs");
+    return Math.ceil($("scroll").scrollHeight + (tabs.classList.contains("hidden") ? 0 : tabs.offsetHeight));
   }
 
-  window.renderFloat = function (data) {
-    currentWord = data.word || "";
-    if (data.pinned !== undefined && data.pinned !== pinned) {
-      pinned = data.pinned;
-      var pb = document.getElementById("pinbtn");
-      if (pb) {
-        pb.textContent = pinned ? "已钉住" : "钉住";
-        pb.style.background = pinned ? "#b06a3f" : "";
-        pb.style.color = pinned ? "#fff" : "";
+  function renderCard() {
+    var card = data.card || { word: data.query, found: false };
+    var h = WW.card(card, { actions: actions(), compact: true });
+    if (!card.found) {
+      h += '<div class="notfound">' + WW.esc(data.status || "词典里没有这个词");
+      if ((data.did_you_mean || []).length) {
+        h += '<div style="margin-top:6px">你要找的是不是：' + data.did_you_mean.map(function (w) {
+          return '<a data-act="word" data-word="' + WW.esc(w) + '">' + WW.esc(w) + "</a>";
+        }).join("") + "</div>";
       }
+      h += "</div>";
+    } else if (data.status) {
+      h += '<div class="wc-note">' + WW.esc(data.status) + "</div>";
     }
-    document.getElementById("word").textContent = data.word || "";
-    document.getElementById("status").innerHTML =
-      data.loading ? '<span class="spin"></span>查询中' : esc(data.status || "");
-    var inner = document.getElementById("inner");
-    if (!data.entries || !data.entries.length) {
-      inner.innerHTML = '<div class="empty">' +
-        (data.loading ? '<span class="spin"></span>正在查询…' : '词典里没有找到这个词') + '</div>';
-      fitHeight();
-    } else {
-      inner.scrollTop = 0;
-      // 每本词典一个标签；双击释义里的单词 / 点词条链接 → 打开查词窗查它
-      WW.render(inner, data.entries, {
-        tabs: true,
-        onEntry: function (w) { window.pywebview.api.open_lookup(w); },
-        onRendered: fitHeight
+    $("card").innerHTML = h;
+  }
+
+  function renderTabs() {
+    var entries = data.entries || [];
+    var tabs = $("tabs");
+    if (!entries.length) { tabs.classList.add("hidden"); tabs.innerHTML = ""; return; }
+    tabs.classList.remove("hidden");
+    var h = '<button data-tab="-1" class="' + (tab < 0 ? "on" : "") + '">简明</button>';
+    entries.forEach(function (e, i) {
+      h += '<button data-tab="' + i + '" class="' + (tab === i ? "on" : "") + '">' + WW.esc(e.name) + "</button>";
+    });
+    h += '<span class="grow"></span><span class="hint">Esc 关闭</span>';
+    tabs.innerHTML = h;
+  }
+
+  function showTab(i) {
+    tab = i;
+    $("card").classList.toggle("hidden", i >= 0);
+    $("rich").classList.toggle("hidden", i < 0);
+    if (i >= 0) {
+      var e = data.entries[i];
+      WW.rich($("richHost"), e, { word: function (w) { WW.api().float_word(w); }, headword: data.card && data.card.word });
+    }
+    renderTabs();
+    $("scroll").scrollTop = 0;
+  }
+
+  function resize() { WW.api().float_resize(naturalHeight()); }
+
+  WW.render = function (d) {
+    data = d || {};
+    pinned = !!data.pinned;
+    saved = !!data.saved;
+    if (data.prefs) WW.setPrefs(data.prefs);
+    tab = -1;
+    renderCard();
+    $("card").classList.remove("hidden");
+    $("rich").classList.add("hidden");
+    if ($("richHost").shadowRoot) $("richHost").shadowRoot.innerHTML = "";
+    renderTabs();
+    $("scroll").scrollTop = 0;
+    return naturalHeight();
+  };
+  WW.reset = function () { pinned = false; };
+  WW.setSaved = function (b) { saved = !!b; if (data) renderCard(); };
+  WW.speakHead = function () { if (data && data.card) WW.say(data.card.word); };
+
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-act],[data-tab]");
+    if (!t || !data) return;
+    if (t.hasAttribute("data-tab")) { showTab(parseInt(t.getAttribute("data-tab"), 10)); resize(); setTimeout(resize, 400); return; }
+    var act = t.getAttribute("data-act"), word = (data.card && data.card.word) || data.query;
+    if (act === "say") WW.say(word, t.getAttribute("data-accent"), t);
+    else if (act === "word") WW.api().float_word(t.getAttribute("data-word"));
+    else if (act === "pin") { pinned = !pinned; WW.api().float_pin(pinned); renderCard(); }
+    else if (act === "open") WW.api().open_lookup(word);
+    else if (act === "star") {
+      var brief = ((data.card && data.card.senses) || []).slice(0, 3).map(function (s) { return (s.pos + " " + s.text).trim(); }).join("；");
+      WW.api().vocab_toggle(word, brief).then(function (on) {
+        saved = on; renderCard(); WW.toast(on ? "已收进生词本" : "已移出生词本");
       });
     }
-  };
-
-  function closeMe() { window.pywebview.api.close_window("float"); }
-  function openLookup() { window.pywebview.api.open_lookup(currentWord); }
-  function speak(accent) { window.pywebview.api.speak(currentWord, accent); }
-
-  function addVocab() {
-    if (!currentWord) return;
-    var b = document.getElementById("vocabbtn");
-    window.pywebview.api.add_vocab(currentWord).then(function (ok) {
-      b.textContent = ok ? "已收藏" : "已存在";
-      b.style.background = ok ? "#6a8f6b" : "#c9b79a";
-      b.style.color = "#fff";
-      setTimeout(function () {
-        b.textContent = "收藏";
-        b.style.background = "";
-        b.style.color = "";
-      }, 1600);
-    });
-  }
-
-  var pinned = false;
-  function togglePin() {
-    pinned = !pinned;
-    var b = document.getElementById("pinbtn");
-    b.textContent = pinned ? "已钉住" : "钉住";
-    b.style.background = pinned ? "#b06a3f" : "";
-    b.style.color = pinned ? "#fff" : "";
-    window.pywebview.api.pin_float(pinned);
-  }
-
-  // 主循环：让主线程执行取词（文字接口只能在主线程用）
-  var polling = false;
-  window.__tickCount = 0;
-  window.__pollCount = 0;
-  setInterval(function () {
-    window.__tickCount++;
-    if (polling) return;
-    if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.poll_hover) return;
-    polling = true;
-    window.pywebview.api.poll_hover().then(function (data) {
-      polling = false;
-      window.__pollCount++;
-      if (data) { window.renderFloat(data); }
-    }).catch(function () { polling = false; });
-  }, 120);
-
-  // 快捷键提示文字跟着设置走（改键后不用改页面）
-  window.setHotkeys = function (hk) {
-    document.querySelectorAll("[data-hk]").forEach(function (el) {
-      if (hk && hk[el.dataset.hk]) el.textContent = hk[el.dataset.hk];
-    });
-  };
-  window.addEventListener("pywebviewready", function () {
-    window.pywebview.api.get_hotkeys().then(window.setHotkeys);
   });
+  document.addEventListener("keydown", function (e) {
+    if (!data || !(data.entries || []).length) return;
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      var n = data.entries.length, i = tab + (e.key === "ArrowRight" ? 1 : -1);
+      if (i < -1) i = n - 1; if (i >= n) i = -1;
+      showTab(i); resize();
+    }
+  });
+  WW.boot("float");
+})();
 </script>
 </body>
 </html>
