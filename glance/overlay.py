@@ -41,7 +41,7 @@ class WNDCLASSW(ctypes.Structure):
 WS_POPUP = 0x80000000
 WS_EX = 0x00080000 | 0x00000020 | 0x00000008 | 0x00000080 | 0x08000000
 # LAYERED | TRANSPARENT（点击穿透）| TOPMOST | TOOLWINDOW | NOACTIVATE
-CLASS_NAME = "WarmWordHighlight"
+CLASS_NAME = "GlanceHighlight"
 
 
 def _rgb(hex_color: str) -> int:

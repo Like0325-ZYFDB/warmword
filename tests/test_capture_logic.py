@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """取词的纯逻辑：选词、拆行、浮窗位置、取词节奏。"""
-from warmword.capture.geometry import WordBox, clean_word, pick_word, place_card, split_line
-from warmword.hover import HoverController, Inputs
+from glance.capture.geometry import WordBox, clean_word, pick_word, place_card, split_line
+from glance.hover import HoverController, Inputs
 
 LINE = [WordBox("They", 0, 0, 40, 20), WordBox("had", 46, 0, 76, 20),
         WordBox("to", 82, 0, 98, 20), WordBox("abandon", 104, 0, 180, 20),

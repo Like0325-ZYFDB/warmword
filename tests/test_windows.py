@@ -23,8 +23,8 @@ def _text_image(text, size=22):
 
 
 def test_winocr_gives_word_boxes():
-    from warmword.capture.geometry import pick_word
-    from warmword.capture.winocr import WinOcr
+    from glance.capture.geometry import pick_word
+    from glance.capture.winocr import WinOcr
     try:
         ocr = WinOcr()
     except RuntimeError as e:
@@ -42,7 +42,7 @@ def test_winocr_gives_word_boxes():
 
 
 def test_capture_service_starts():
-    from warmword.capture.client import CaptureClient
+    from glance.capture.client import CaptureClient
     c = CaptureClient()
     try:
         print("取词服务状态:", c.status)
@@ -54,7 +54,7 @@ def test_capture_service_starts():
 
 
 def test_highlight_window():
-    from warmword.overlay import Highlight
+    from glance.overlay import Highlight
     h = Highlight(log=print)
     assert h.hwnd
     h.show((100, 100, 160, 120))
@@ -62,7 +62,7 @@ def test_highlight_window():
 
 
 def test_hotkey_parse():
-    from warmword.hotkeys import MOD_ALT, MOD_CONTROL, parse_hotkey, valid_hotkey
+    from glance.hotkeys import MOD_ALT, MOD_CONTROL, parse_hotkey, valid_hotkey
     mods, vk = parse_hotkey("ctrl+alt+d")
     assert mods & MOD_CONTROL and mods & MOD_ALT and vk == 0x44
     assert valid_hotkey("ctrl+alt+f5") and not valid_hotkey("shift+d") and not valid_hotkey("ctrl+alt")

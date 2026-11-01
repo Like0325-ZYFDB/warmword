@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from warmword.wordlist import pick_new_words
+from glance.wordlist import pick_new_words
 
 
 def test_common_words_are_skipped_and_saved_words_first():

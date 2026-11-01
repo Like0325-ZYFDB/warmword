@@ -5,8 +5,8 @@ import csv
 import pytest
 from mdict_utils import writer
 
-from warmword.dictionary import DictEngine, build_card, enrich_from_mdx
-from warmword.dictionary.card import mdx_phonetics, split_sense
+from glance.dictionary import DictEngine, build_card, enrich_from_mdx
+from glance.dictionary.card import mdx_phonetics, split_sense
 
 HEADER = ["word", "phonetic", "definition", "translation", "pos", "collins", "oxford",
           "tag", "bnc", "frq", "exchange", "detail", "audio"]

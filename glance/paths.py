@@ -3,10 +3,11 @@
 
 - 源码运行：程序目录 = 仓库根目录（main.py 所在处）
 - 打包运行：程序目录 = exe 所在目录，界面资源在 PyInstaller 的解包目录
-- 用户数据默认放 %APPDATA%\\WarmWord，程序目录放了 portable.txt 时改为放程序目录（便携版）
+- 用户数据默认放 %APPDATA%\\Glance，程序目录放了 portable.txt 时改为放程序目录（便携版）
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -17,7 +18,9 @@ BASE = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resol
 RES = Path(getattr(sys, "_MEIPASS", BASE))
 UI_DIR = RES / "ui"
 PORTABLE = (BASE / "portable.txt").exists()
-DATA = BASE if PORTABLE else Path(os.environ.get("APPDATA") or Path.home()) / "WarmWord"
+APPDATA = Path(os.environ.get("APPDATA") or Path.home())
+DATA = BASE if PORTABLE else APPDATA / "Glance"
+OLD_DATA = APPDATA / "WarmWord"          # 改名前（暖词）的数据目录
 
 CONFIG_PATH = DATA / "config.json"
 VOCAB_PATH = DATA / "生词本.json"
@@ -32,7 +35,32 @@ LOG_DIR = DATA / "logs"
 _OLD_FILES = ("config.json", "生词本.json")
 
 
+def migrate_renamed_data(old: Path, new: Path, log=print) -> bool:
+    """改名前的数据目录整个复制过来（原目录保留不动），配置里指向旧目录的词典路径改成新目录。"""
+    if not old.is_dir() or new.exists():
+        return False
+    try:
+        shutil.copytree(old, new)
+    except Exception as e:
+        log(f"[数据目录] 从 {old} 复制失败: {e!r}")
+        return False
+    cfg = new / "config.json"
+    try:
+        data = json.loads(cfg.read_text(encoding="utf-8"))
+        for d in data.get("dictionaries", []):
+            path = str(d.get("path", ""))
+            if path.lower().startswith(str(old).lower()):
+                d["path"] = str(new) + path[len(str(old)):]
+        cfg.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    log(f"[数据目录] 已把 {old} 复制到 {new}")
+    return True
+
+
 def migrate_old_data(log=print) -> None:
+    if not PORTABLE:
+        migrate_renamed_data(OLD_DATA, DATA, log)
     try:
         DATA.mkdir(parents=True, exist_ok=True)
     except Exception as e:

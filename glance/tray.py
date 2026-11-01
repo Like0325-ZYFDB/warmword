@@ -12,7 +12,7 @@ ACCENT = (37, 99, 235, 255)
 
 
 def make_icon():
-    """托盘图标：蓝底圆角方块上一个白色「词」字（16px 下也看得清）。"""
+    """托盘图标：蓝底圆角方块上一个白色「瞥」字（16px 下也看得清）。"""
     from PIL import Image, ImageDraw, ImageFont
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -20,7 +20,7 @@ def make_icon():
     for fp in (r"C:\Windows\Fonts\msyhbd.ttc", r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simhei.ttf"):
         if os.path.exists(fp):
             try:
-                d.text((32, 31), "词", font=ImageFont.truetype(fp, 38), fill=(255, 255, 255, 255), anchor="mm")
+                d.text((32, 31), "瞥", font=ImageFont.truetype(fp, 38), fill=(255, 255, 255, 255), anchor="mm")
                 break
             except Exception:
                 continue
@@ -73,4 +73,4 @@ def build_tray(app):
         Item("重启", lambda i, t: app.restart()),
         Item(label("退出", "quit"), lambda i, t: app.exit()),
     )
-    return pystray.Icon("warmword", make_icon(), "暖词 · 取词翻译", menu)
+    return pystray.Icon("glance", make_icon(), "一瞥 · 取词翻译", menu)

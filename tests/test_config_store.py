@@ -2,8 +2,8 @@
 """配置迁移、设置校验、生词本与历史。"""
 import json
 
-from warmword.config import Config, apply_settings, migrate
-from warmword.store import History, Vocab
+from glance.config import Config, apply_settings, migrate
+from glance.store import History, Vocab
 
 
 def _valid(spec):
@@ -66,8 +66,22 @@ def test_vocab_and_history(tmp_path):
     v.add("hello")
     assert v.export_csv(tmp_path / "out").endswith(".csv")
     anki = v.export_anki(tmp_path / "out", lambda w: "<b>你好</b>")
-    assert "hello\t<b>你好</b>\t暖词" in open(anki, encoding="utf-8").read()
+    assert "hello\t<b>你好</b>\t一瞥" in open(anki, encoding="utf-8").read()
     h = History(tmp_path / "h.json", log=lambda m: None)
     for w in ["a1", "b2", "A1"]:
         h.add(w)
     assert h.recent() == ["A1", "b2"]
+
+
+def test_migrate_renamed_data(tmp_path):
+    from glance.paths import migrate_renamed_data
+    old, new = tmp_path / "WarmWord", tmp_path / "Glance"
+    (old / "词库").mkdir(parents=True)
+    (old / "生词本.json").write_text('[{"word": "abandon"}]', encoding="utf-8")
+    (old / "config.json").write_text(json.dumps({"dictionaries": [
+        {"path": str(old / "词库" / "ecdict.csv")}, {"path": "D:\\词典\\oald.mdx"}]}), encoding="utf-8")
+    assert migrate_renamed_data(old, new, log=lambda m: None)
+    assert (new / "生词本.json").exists() and (old / "生词本.json").exists()
+    paths = [d["path"] for d in json.loads((new / "config.json").read_text(encoding="utf-8"))["dictionaries"]]
+    assert paths == [str(new / "词库" / "ecdict.csv"), "D:\\词典\\oald.mdx"]
+    assert not migrate_renamed_data(old, new, log=lambda m: None)  # 新目录已存在：不再覆盖

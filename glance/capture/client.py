@@ -27,7 +27,7 @@ class CaptureClient:
     def _command(self) -> list[str]:
         if FROZEN:  # 打包后没有 .py 文件：同一个 exe 带参数启动取词服务
             return [sys.executable, "--capture-service"]
-        return [sys.executable, "-m", "warmword.capture.service"]
+        return [sys.executable, "-m", "glance.capture.service"]
 
     def _start(self):
         try:

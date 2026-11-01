@@ -107,7 +107,7 @@ class Vocab(JsonList):
             word = i.get("word", "")
             back = (back_html(word) if back_html else None) or html_mod.escape(i.get("brief", ""))
             back = back.replace("\t", " ").replace("\n", "<br>")
-            lines.append(f"{word}\t{back}\t暖词")
+            lines.append(f"{word}\t{back}\t一瞥")
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return str(path)
 

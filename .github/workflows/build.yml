@@ -29,37 +29,37 @@ jobs:
         run: python -m pytest -q -rs tests
 
       - name: 导入检查（Windows 专用模块）
-        run: python -c "import warmword.app, warmword.api, warmword.windows, warmword.overlay, warmword.tray, warmword.capture.uia, warmword.capture.winocr, warmword.capture.rapid"
+        run: python -c "import glance.app, glance.api, glance.windows, glance.overlay, glance.tray, glance.capture.uia, glance.capture.winocr, glance.capture.rapid"
 
       - name: 生成 UI Automation 接口（打包时一起带上）
         run: python -c "from comtypes.client import GetModule; GetModule('UIAutomationCore.dll')"
 
       - name: 打包
         run: >
-          pyinstaller --noconfirm --windowed --name WarmWord
+          pyinstaller --noconfirm --windowed --name Glance
           --add-data "ui;ui"
           --collect-all rapidocr_onnxruntime
           --collect-all winrt
           --collect-submodules comtypes.gen
-          --collect-submodules warmword
+          --collect-submodules glance
           main.py
 
       - name: 冒烟测试（打包后的取词服务能启动、各级取词可用）
-        run: python tests/smoke_frozen.py dist/WarmWord/WarmWord.exe
+        run: python tests/smoke_frozen.py dist/Glance/Glance.exe
 
       - name: 压缩
         shell: pwsh
         run: |
-          Copy-Item README.md, LICENSE, config.example.json dist/WarmWord/
-          Compress-Archive -Path dist/WarmWord -DestinationPath WarmWord-windows.zip
+          Copy-Item README.md, LICENSE, config.example.json dist/Glance/
+          Compress-Archive -Path dist/Glance -DestinationPath Glance-windows.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: WarmWord-windows
-          path: WarmWord-windows.zip
+          name: Glance-windows
+          path: Glance-windows.zip
 
       - name: 发布 Release（打 v* 标签时）
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: WarmWord-windows.zip
+          files: Glance-windows.zip

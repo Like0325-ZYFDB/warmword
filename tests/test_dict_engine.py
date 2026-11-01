@@ -5,7 +5,7 @@ import csv
 import pytest
 from mdict_utils import writer
 
-from warmword.dictionary import DictEngine, inflection_candidates
+from glance.dictionary import DictEngine, inflection_candidates
 
 
 @pytest.mark.parametrize("word, base", [

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""暖词主程序：把取词、词典、窗口、热键、托盘串起来。
+"""一瞥主程序：把取词、词典、窗口、热键、托盘串起来。
 
 线程分工：
   界面线程（主线程）  pywebview 的消息循环
@@ -91,7 +91,7 @@ class App:
     def run(self) -> None:
         import webview
         log("=" * 40)
-        log(f"[启动] 暖词 2.0（数据目录 {DATA}{'，便携模式' if PORTABLE else ''}）")
+        log(f"[启动] 一瞥 2.0（数据目录 {DATA}{'，便携模式' if PORTABLE else ''}）")
         translate.configure(self.cfg["baidu_appid"], self.cfg["baidu_key"])
         threading.Thread(target=self._load_engine, daemon=True, name="engine").start()
         threading.Thread(target=self._start_capture, daemon=True, name="capture-start").start()
@@ -176,7 +176,7 @@ class App:
         self._notes[msg] = now
         try:
             if self.tray is not None and getattr(self.tray, "HAS_NOTIFICATION", False):
-                self.tray.notify(msg, "暖词")
+                self.tray.notify(msg, "一瞥")
         except Exception as e:
             log(f"[提示] 气泡失败 {e!r}")
 
@@ -630,7 +630,7 @@ class App:
 
     # ================= 自检 =================
     def self_check(self) -> str:
-        lines = ["暖词自检报告", f"时间: {time.strftime('%Y-%m-%d %H:%M:%S')}", f"数据目录: {DATA}", ""]
+        lines = ["一瞥自检报告", f"时间: {time.strftime('%Y-%m-%d %H:%M:%S')}", f"数据目录: {DATA}", ""]
         if self.engine is None:
             lines.append("词典: 还没加载完")
         else:

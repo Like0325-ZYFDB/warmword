@@ -16,12 +16,12 @@ from . import win32
 
 SPECS = {
     # 名字: (标题, 宽, 高, 无边框, 可获得焦点, 启动时就建)
-    "float": ("暖词 · 取词", 400, 320, True, False, True),
-    "lookup": ("暖词", 780, 640, False, True, False),
-    "translate": ("暖词 · 翻译", 640, 520, False, True, False),
-    "vocab": ("暖词 · 生词本", 720, 640, False, True, False),
-    "settings": ("暖词 · 设置", 760, 700, False, True, False),
-    "selbtn": ("暖词 · 划词", 36, 36, True, False, False),
+    "float": ("一瞥 · 取词", 400, 320, True, False, True),
+    "lookup": ("一瞥", 780, 640, False, True, False),
+    "translate": ("一瞥 · 翻译", 640, 520, False, True, False),
+    "vocab": ("一瞥 · 生词本", 720, 640, False, True, False),
+    "settings": ("一瞥 · 设置", 760, 700, False, True, False),
+    "selbtn": ("一瞥 · 划词", 36, 36, True, False, False),
 }
 NATIVE = ("float", "selbtn")  # 这两个窗口只用系统接口显示，不经过界面库（界面库的显示会抢焦点、进任务栏）
 

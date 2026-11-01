@@ -5,9 +5,9 @@ import urllib.request
 
 import pytest
 
-from warmword.server import ResourceServer
+from glance.server import ResourceServer
 from test_dict_render import PNG, _make_dict
-from warmword.dictionary import DictEngine
+from glance.dictionary import DictEngine
 
 
 def _get(url):

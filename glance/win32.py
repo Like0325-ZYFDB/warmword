@@ -203,15 +203,15 @@ def set_foreground(hwnd) -> None:
 
 
 # ---------------- 单实例 ----------------
-QUIT_EVENT = "WarmWordHelper_QuitEvent_v1"
-SHOW_EVENT = "WarmWordHelper_ShowLookup_v1"
+QUIT_EVENT = "GlanceHelper_QuitEvent_v1"
+SHOW_EVENT = "GlanceHelper_ShowLookup_v1"
 kernel32.CreateEventW.restype = ctypes.c_void_p
 kernel32.OpenEventW.restype = ctypes.c_void_p
 kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
 
 
 def single_instance() -> bool:
-    kernel32.CreateMutexW(None, False, "WarmWordHelper_SingleInstance")
+    kernel32.CreateMutexW(None, False, "GlanceHelper_SingleInstance")
     return kernel32.GetLastError() != 183  # ERROR_ALREADY_EXISTS
 
 

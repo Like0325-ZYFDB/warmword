@@ -4,8 +4,8 @@ import base64
 
 from mdict_utils import writer
 
-from warmword.dictionary import DictEngine
-from warmword.dictionary.resources import ref_path, rewrite_css, rewrite_html
+from glance.dictionary import DictEngine
+from glance.dictionary.resources import ref_path, rewrite_css, rewrite_html
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 MP3 = b"ID3" + b"\x00" * 2000

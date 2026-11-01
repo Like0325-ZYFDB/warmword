@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """打包后的冒烟测试：用 --capture-service 启动 exe，检查就绪消息、取词回复和各级取词是否可用。
 
-用法：python tests/smoke_frozen.py dist/WarmWord/WarmWord.exe
+用法：python tests/smoke_frozen.py dist/Glance/Glance.exe
 """
 import json
 import subprocess

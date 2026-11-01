@@ -8,7 +8,8 @@ from pathlib import Path
 from .paths import BASE, FROZEN
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-NAME = "暖词取词助手"
+NAME = "一瞥取词助手"
+OLD_NAMES = ("暖词取词助手",)  # 改名前的自启项，启动时清掉
 
 
 def command() -> str:
@@ -52,8 +53,23 @@ def set_enabled(on: bool, log=print) -> bool:
         return False
 
 
+def remove_old(log=print) -> None:
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
+            for name in OLD_NAMES:
+                try:
+                    winreg.DeleteValue(k, name)
+                    log(f"[自启] 已移除旧的自启项 {name}")
+                except OSError:
+                    pass
+    except Exception:
+        pass
+
+
 def sync(want: bool, log=print) -> None:
     """按配置开关；注册表里的路径过期了（换过目录）就改成当前路径。"""
+    remove_old(log)
     if want and current() != command():
         set_enabled(True, log)
     elif not want and enabled():
