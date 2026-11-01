@@ -1,136 +1,93 @@
 <!doctype html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<title>一瞥 · 生词本</title>
+<link rel="stylesheet" href="theme.css">
 <style>
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: linear-gradient(165deg, #faf6ee 0%, #f5eddd 100%);
-    font-family: "Microsoft YaHei", sans-serif;
-    color: #3d3229;
-  }
-  .wrap { padding: 14px 16px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
-  .title {
-    font-family: "KaiTi", "STKaiti", serif; font-size: 18px; color: #7a5c3e;
-    letter-spacing: 2px; margin-bottom: 10px; flex: none;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .title .deco { color: #c2a06a; font-size: 14px; margin: 0 4px; }
-  .title .btn { margin-left: auto; }
-  .title .btn + .btn { margin-left: 6px; }
-  .list { flex: 1; overflow-y: auto; }
-  .list::-webkit-scrollbar { width: 7px; }
-  .list::-webkit-scrollbar-thumb { background: #d8cbb2; border-radius: 4px; }
-  .item {
-    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 12px;
-    padding: 9px 13px; margin-bottom: 7px;
-    display: flex; align-items: flex-start; gap: 10px;
-  }
-  .word {
-    font-family: "KaiTi", serif; font-size: 17px; font-weight: 700; color: #6b4a2b;
-    min-width: 130px; word-break: break-all;
-  }
-  .meta { flex: 1; min-width: 0; }
-  .brief {
-    font-size: 12.5px; color: #6a5a46; line-height: 1.6;
-    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-  }
-  .time { font-size: 11px; color: #a08c6e; margin-top: 3px; }
-  .ops { display: flex; gap: 5px; flex: none; }
-  .btn {
-    border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45;
-    border-radius: 9px; padding: 3px 10px; font-size: 12px; cursor: pointer;
-    font-family: "Microsoft YaHei", sans-serif;
-  }
-  .btn:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
-  .empty { color: #a08c6e; text-align: center; padding: 60px 10px; font-size: 13px; line-height: 2; }
-  .hint {
-    flex: none; margin-top: 8px; font-size: 11px; color: #a08c6e;
-    font-family: "KaiTi", serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .tip { font-size: 12px; color: #8a6a45; margin-left: 6px; }
+  html, body { height: 100%; overflow: hidden; }
+  #app { height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+  header { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  h1 { font: 600 18px var(--font-display); margin: 0 8px 0 0; }
+  .count { color: var(--text-3); font-size: 13px; }
+  .grow { flex: 1; }
+  #filter { width: 180px; }
+  #list { overflow-y: auto; padding: 6px 10px 16px; }
+  .row { display: grid; grid-template-columns: minmax(110px, 180px) 1fr auto auto; align-items: center; gap: 12px;
+    padding: 8px 10px; border-radius: 8px; }
+  .row:hover { background: var(--hover); }
+  .row .w { font-weight: 600; cursor: pointer; font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+  .row .w:hover { color: var(--accent-text); }
+  .row .b { color: var(--text-2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .d { color: var(--text-3); font-size: 12px; white-space: nowrap; }
+  .row .ops { display: flex; gap: 2px; opacity: .35; }
+  .row:hover .ops { opacity: 1; }
+  .empty-state { padding: 70px 20px; text-align: center; color: var(--text-3); }
+  .empty-state .big { font: 600 18px var(--font-display); color: var(--text); margin-bottom: 6px; }
 </style>
-<!--WW_COMMON-->
 </head>
 <body>
-<div class="wrap">
-  <div class="title"><span class="deco">✿</span>暖词 · 生词本<span class="deco">✎</span>
-    <span class="tip" id="count"></span>
-    <button class="btn" onclick="exportCsv()">导出表格</button>
-    <button class="btn" onclick="exportAnki()" title="Anki：文件 → 导入，选这个 txt">导出 Anki</button>
-    <button class="btn" onclick="clearAll()">清空</button>
-    <button class="btn" onclick="closeMe()">关闭</button>
-  </div>
-  <div class="list" id="list"><div class="empty">还没有收藏的单词<br><br>取词后点小窗上的「收藏」，或按 <span data-hk="add_vocab">Ctrl+Alt+B</span></div></div>
-  <div class="hint">按 <span data-hk="add_vocab">Ctrl+Alt+B</span> 把鼠标下的词收进生词本　·　导出后会自动打开所在文件夹</div>
+<div id="app">
+  <header>
+    <h1>生词本</h1><span class="count" id="count"></span>
+    <span class="grow"></span>
+    <input id="filter" type="search" placeholder="筛选" spellcheck="false">
+    <button class="btn" id="csv"></button>
+    <button class="btn" id="anki"></button>
+    <button class="icon-btn" id="folder" title="打开导出文件夹"></button>
+    <button class="icon-btn" id="clearAll" title="清空生词本"></button>
+  </header>
+  <div id="list"></div>
 </div>
+<script src="common.js"></script>
 <script>
-  function esc(s) {
-    return (s || "").replace(/[&<>]/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
-    });
-  }
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var items = [];
+  $("csv").innerHTML = WW.icon("download") + "导出 CSV";
+  $("anki").innerHTML = WW.icon("download") + "导出 Anki";
+  $("folder").innerHTML = WW.icon("folder");
+  $("clearAll").innerHTML = WW.icon("trash");
 
-  window.renderVocab = function (data) {
-    var items = data.items || [];
-    document.getElementById("count").textContent = items.length ? "共 " + items.length + " 个" : "";
-    var box = document.getElementById("list");
+  function draw() {
+    var f = $("filter").value.trim().toLowerCase();
+    var shown = items.filter(function (i) { return !f || (i.word + " " + (i.brief || "")).toLowerCase().indexOf(f) >= 0; });
+    $("count").textContent = items.length ? "共 " + items.length + " 个" : "";
     if (!items.length) {
-      box.innerHTML = '<div class="empty">还没有收藏的单词<br><br>取词后点小窗上的「收藏」，或用收藏快捷键</div>';
+      $("list").innerHTML = '<div class="empty-state"><div class="big">收藏的单词会出现在这里</div>' +
+        "<div>在取词浮窗或查词窗里点星标，或者按 " + WW.esc((WW.prefs.hotkeys || {}).add_vocab || "") + " 收藏鼠标下的词</div></div>";
       return;
     }
-    var html = "";
-    items.forEach(function (it) {
-      html += '<div class="item">' +
-        '<div class="word">' + esc(it.word) + '</div>' +
-        '<div class="meta"><div class="brief">' + esc(it.brief || "（无释义）") + '</div>' +
-        '<div class="time">' + esc(it.added_at || "") + '</div></div>' +
-        '<div class="ops">' +
-          '<button class="btn" onclick="speak(\'' + esc(it.word).replace(/'/g, "") + '\')">发音</button>' +
-          '<button class="btn" onclick="del(\'' + esc(it.word).replace(/'/g, "") + '\')">删除</button>' +
-        '</div></div>';
-    });
-    box.innerHTML = html;
-  };
+    $("list").innerHTML = shown.map(function (i) {
+      var w = WW.esc(i.word);
+      return '<div class="row"><span class="w" data-look="' + w + '">' + w + '</span><span class="b" title="' + WW.esc(i.brief) + '">' +
+        WW.esc(i.brief || "") + '</span><span class="d">' + WW.esc((i.added_at || "").slice(0, 10)) + '</span><span class="ops">' +
+        '<button class="icon-btn" data-say="' + w + '" title="发音">' + WW.icon("volume") + "</button>" +
+        '<button class="icon-btn" data-del="' + w + '" title="移出生词本">' + WW.icon("x") + "</button></span></div>";
+    }).join("") || '<div class="empty-state">没有匹配的单词</div>';
+  }
+  WW.refresh = function () { WW.api().vocab_list().then(function (r) { items = r || []; draw(); }); };
 
-  function reload() {
-    window.pywebview.api.list_vocab().then(function (items) {
-      window.renderVocab({ items: items });
-    });
-  }
-  function speak(w) { window.pywebview.api.speak_word(w, ""); }  // 空 = 用设置里的默认口音
-  function del(w) {
-    window.pywebview.api.remove_vocab(w).then(function () { reload(); });
-  }
-  function clearAll() {
-    window.pywebview.api.list_vocab().then(function (items) {
-      if (!items.length) return;
-      if (!confirm("确定清空全部 " + items.length + " 个生词？清空后不能恢复（可以先导出备份）。")) return;
-      window.pywebview.api.clear_vocab().then(function () { reload(); });
-    });
-  }
+  $("filter").addEventListener("input", draw);
+  $("list").addEventListener("click", function (e) {
+    var t = e.target.closest("[data-look],[data-say],[data-del]"); if (!t) return;
+    if (t.hasAttribute("data-say")) WW.say(t.getAttribute("data-say"), null, t);
+    else if (t.hasAttribute("data-look")) WW.api().open_lookup(t.getAttribute("data-look"));
+    else WW.api().vocab_remove(t.getAttribute("data-del")).then(WW.refresh);
+  });
   function exported(path) {
-    var el = document.getElementById("count");
-    el.textContent = path ? "已导出：" + path.split("\\").pop() : "生词本是空的";
-    if (path) window.pywebview.api.open_folder("export");
+    if (path) { WW.toast("已导出到「导出」文件夹"); WW.api().open_folder("export"); } else WW.toast("生词本是空的");
   }
-  function exportCsv() { window.pywebview.api.export_vocab().then(exported); }
-  function exportAnki() { window.pywebview.api.export_anki().then(exported); }
-  function closeMe() { window.pywebview.api.close_window("vocab"); }
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") closeMe();
+  $("csv").addEventListener("click", function () { WW.api().export_csv().then(exported); });
+  $("anki").addEventListener("click", function () { WW.api().export_anki().then(exported); });
+  $("folder").addEventListener("click", function () { WW.api().open_folder("export"); });
+  $("clearAll").addEventListener("click", function () {
+    if (!items.length) return;
+    if (confirm("清空生词本里的 " + items.length + " 个单词？这一步不能撤销。")) WW.api().vocab_clear().then(WW.refresh);
   });
-  reload();
-
-  // 快捷键提示文字跟着设置走（改键后不用改页面）
-  window.setHotkeys = function (hk) {
-    document.querySelectorAll("[data-hk]").forEach(function (el) {
-      if (hk && hk[el.dataset.hk]) el.textContent = hk[el.dataset.hk];
-    });
-  };
-  window.addEventListener("pywebviewready", function () {
-    window.pywebview.api.get_hotkeys().then(window.setHotkeys);
-  });
+  WW.onPrefs = function () { if (!items.length) draw(); };
+  WW.boot("vocab", WW.refresh);
+})();
 </script>
 </body>
 </html>

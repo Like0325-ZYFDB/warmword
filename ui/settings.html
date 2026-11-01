@@ -1,574 +1,312 @@
 <!doctype html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<title>一瞥 · 设置</title>
+<link rel="stylesheet" href="theme.css">
 <style>
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: linear-gradient(165deg, #faf6ee 0%, #f5eddd 100%);
-    font-family: "Microsoft YaHei", sans-serif;
-    color: #3d3229; font-size: 13px;
-  }
-  .wrap { padding: 14px 16px 10px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
-  .title {
-    font-family: "KaiTi", "STKaiti", serif; font-size: 18px; color: #7a5c3e;
-    letter-spacing: 2px; margin-bottom: 8px; flex: none;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .title .deco { color: #c2a06a; font-size: 14px; }
-  .title .tip { font-family: "Microsoft YaHei"; font-size: 11.5px; color: #a08c6e; letter-spacing: 0; }
-  .bar {
-    flex: none; margin-bottom: 8px; padding: 7px 12px; border-radius: 9px;
-    font-size: 12.5px; display: none;
-  }
-  .bar.ok { display: block; background: #eef7e6; border: 1px solid #bcd9a3; color: #4a7a2b; }
-  .bar.err { display: block; background: #fdeeee; border: 1px solid #e6b4b4; color: #a33; }
-  .body { flex: 1; overflow-y: auto; padding-right: 4px; }
-  .body::-webkit-scrollbar { width: 7px; }
-  .body::-webkit-scrollbar-thumb { background: #d8cbb2; border-radius: 4px; }
-  .card {
-    background: #fffdf7; border: 1px solid #e2d5bb; border-radius: 13px;
-    padding: 11px 14px; margin-bottom: 10px;
-  }
-  .card h3 {
-    margin: 0 0 8px; font-family: "KaiTi", serif; font-size: 15px; color: #6b4a2b;
-    font-weight: 700; letter-spacing: 1px; display: flex; align-items: center; gap: 7px;
-  }
-  .card h3 .hint { font-family: "Microsoft YaHei"; font-size: 11px; color: #a08c6e; font-weight: 400; letter-spacing: 0; margin-left: auto; }
-  .row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 6px 0; border-bottom: 1px dashed #efe5cf;
-  }
-  .row:last-child { border-bottom: none; }
-  .row .lbl { flex: none; width: 128px; font-size: 12.5px; color: #4a3b2c; }
-  .row .sub { display: block; font-size: 11px; color: #a08c6e; margin-top: 1px; }
-  .row .grow { flex: 1; min-width: 0; }
-  .key {
-    font-family: "Consolas", monospace; font-size: 12px; letter-spacing: .5px;
-    min-width: 132px; text-align: center;
-    border: 1px solid #d9c8a6; background: #fffaf0; color: #7a5c3e;
-    border-radius: 8px; padding: 5px 10px; cursor: pointer;
-  }
-  .key:hover { border-color: #b06a3f; color: #b06a3f; }
-  .key.listen { background: #fdf1e0; border-color: #b06a3f; color: #b06a3f; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .dot.ok { background: #7cb342; }
-  .dot.bad { background: #d9534f; }
-  .dot.none { background: #d8cbb2; }
-  .btn {
-    border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45;
-    border-radius: 9px; padding: 4px 12px; font-size: 12px; cursor: pointer;
-    font-family: "Microsoft YaHei", sans-serif;
-  }
-  .btn:hover { background: #b06a3f; color: #fff; border-color: #b06a3f; }
-  .btn.primary { background: #b06a3f; color: #fff; border-color: #b06a3f; padding: 6px 20px; font-size: 13px; }
-  .btn.primary:hover { background: #9a5834; }
-  .btn:disabled { opacity: .45; cursor: default; }
-  .dict {
-    display: flex; align-items: center; gap: 8px;
-    padding: 7px 10px; margin-bottom: 6px;
-    background: #fdf9ef; border: 1px solid #eee2c9; border-radius: 10px;
-  }
-  .dict .dn { flex: none; width: 150px; font-size: 12.5px; color: #6b4a2b; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dict .dm { flex: 1; font-size: 11.5px; color: #8a7a62; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dict .ops { display: flex; gap: 4px; }
-  .dict .ops .btn { padding: 2px 8px; font-size: 11.5px; }
-  .dim { color: #a08c6e; font-size: 12px; padding: 4px 0; }
-  .sw { position: relative; display: inline-block; width: 40px; height: 22px; flex: none; }
-  .sw input { opacity: 0; width: 0; height: 0; }
-  .sw span {
-    position: absolute; inset: 0; background: #ded2bb; border-radius: 22px;
-    transition: .18s; cursor: pointer;
-  }
-  .sw span:before {
-    content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
-    background: #fffdf7; border-radius: 50%; transition: .18s;
-    box-shadow: 0 1px 3px rgba(0,0,0,.18);
-  }
-  .sw input:checked + span { background: #b06a3f; }
-  .sw input:checked + span:before { transform: translateX(18px); }
-  input[type=range] { -webkit-appearance: none; width: 200px; height: 4px; border-radius: 3px; background: #e8dcc4; outline: none; }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%;
-    background: #b06a3f; cursor: pointer; border: 2px solid #fffdf7;
-    box-shadow: 0 1px 4px rgba(0,0,0,.2);
-  }
-  .val { font-family: "Consolas", monospace; font-size: 12px; color: #8a6a45; margin-left: 8px; }
-  .seg { display: flex; gap: 5px; }
-  .seg button {
-    border: 1px solid #d9c8a6; background: #fffaf0; color: #8a6a45;
-    border-radius: 8px; padding: 3px 13px; font-size: 12px; cursor: pointer;
-    font-family: "Microsoft YaHei";
-  }
-  .seg button.on { background: #b06a3f; color: #fff; border-color: #b06a3f; }
-  .foot { flex: none; display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid #eadfc7; }
-  .foot .state { flex: 1; font-size: 11.5px; color: #a08c6e; }
-  .dict.missing { background: #fdf0ee; border-color: #ecc7c0; }
-  .dict.missing .dm { color: #b0463a; }
-  .txt {
-    font-family: "Consolas", monospace; font-size: 12px; width: 220px;
-    border: 1px solid #d9c8a6; background: #fffaf0; color: #5a4a36;
-    border-radius: 8px; padding: 4px 9px; outline: none;
-  }
-  .txt:focus { border-color: #b06a3f; }
-  .prog { height: 4px; border-radius: 3px; background: #eadfc7; margin-top: 6px; overflow: hidden; display: none; }
-  .prog i { display: block; height: 100%; width: 0; background: #b06a3f; transition: width .3s; }
+  html, body { height: 100%; overflow: hidden; }
+  #app { height: 100vh; display: grid; grid-template-columns: 168px 1fr; }
+  nav { background: var(--surface); padding: 18px 8px; border-right: 1px solid var(--border); }
+  nav .brand { font: 600 16px var(--font-display); padding: 0 10px 14px; }
+  nav button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 7px 10px;
+    border-radius: 7px; cursor: pointer; color: var(--text-2); font-size: 13.5px; margin-bottom: 1px; }
+  nav button:hover { background: var(--hover); color: var(--text); }
+  nav button.on { background: var(--bg); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px var(--border); }
+  #main { overflow-y: auto; padding: 22px 28px 40px; }
+  section { display: none; max-width: 620px; }
+  section.on { display: block; }
+  h2 { font: 600 20px var(--font-display); margin: 0 0 4px; }
+  .sub { color: var(--text-3); font-size: 13px; margin: 0 0 18px; }
+  .group { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
+  .item { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
+  .item + .item { border-top: 1px solid var(--border); }
+  .item .t { flex: 1; min-width: 0; }
+  .item .t b { display: block; font-weight: 600; font-size: 13.5px; }
+  .item .t span { display: block; color: var(--text-3); font-size: 12.5px; margin-top: 1px; }
+  .item input[type=text], .item input[type=password] { width: 220px; }
+  input[type=range] { width: 160px; accent-color: var(--accent); }
+  .val { width: 56px; text-align: right; color: var(--text-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .dict { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; }
+  .dict + .dict { border-top: 1px solid var(--border); }
+  .dict .n { flex: 1; min-width: 0; }
+  .dict .n b { font-weight: 600; font-size: 13.5px; }
+  .dict .n > span { display: block; color: var(--text-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dict .badge { font-size: 11px; padding: 0 6px; line-height: 18px; border-radius: 4px; background: var(--surface); color: var(--text-2); margin-left: 6px; font-weight: 400; }
+  .dict .bad { color: var(--danger) !important; }
+  .dict .ops { display: flex; gap: 0; }
+  .callout { border: 1px solid var(--border); background: var(--accent-soft); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 16px; }
+  .callout b { display: block; margin-bottom: 2px; }
+  .callout p { margin: 0 0 10px; font-size: 13px; color: var(--text-2); }
+  .bar { height: 6px; border-radius: 6px; background: var(--border); overflow: hidden; margin-top: 8px; }
+  .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  .prog { font-size: 12.5px; color: var(--text-2); margin-top: 6px; }
+  .hk { width: 150px; text-align: center; cursor: pointer; caret-color: transparent; font-size: 13px; }
+  .hk.rec { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); color: var(--text-3); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--ok); }
+  .dot.bad { background: var(--danger); }
+  .dot.unk { background: var(--border-2); }
+  .row-actions { display: flex; gap: 8px; margin-top: 4px; }
+  .kv { font-size: 13px; color: var(--text-2); }
+  .kv code { font: 12px Consolas, monospace; background: var(--surface); padding: 1px 5px; border-radius: 4px; user-select: text; }
 </style>
-<!--WW_COMMON-->
 </head>
 <body>
-<div class="wrap">
-  <div class="title"><span class="deco">✿</span>暖词 · 设置<span class="deco">✎</span>
-    <span class="tip">改完点右下角「保存并应用」</span>
-  </div>
-  <div class="bar" id="bar"></div>
+<div id="app">
+  <nav>
+    <div class="brand">一瞥</div>
+    <button data-s="capture" class="on">取词</button>
+    <button data-s="dicts">词典</button>
+    <button data-s="keys">快捷键</button>
+    <button data-s="voice">翻译与发音</button>
+    <button data-s="look">外观</button>
+    <button data-s="general">通用</button>
+  </nav>
+  <div id="main">
+    <section id="s-capture" class="on">
+      <h2>取词</h2><p class="sub">指向屏幕上的英文单词，浮窗显示释义</p>
+      <div class="group">
+        <div class="item"><div class="t"><b>取词方式</b><span id="modeHint"></span></div>
+          <div class="seg" data-key="capture_mode"><button data-v="modifier">按住键取词</button><button data-v="hover">停住即取词</button><button data-v="off">关闭</button></div></div>
+        <div class="item" id="modRow"><div class="t"><b>取词键</b><span>按住它，指到哪个词就取哪个词</span></div>
+          <div class="seg" data-key="capture_modifier"><button data-v="shift">Shift</button><button data-v="ctrl">Ctrl</button><button data-v="alt">Alt</button></div></div>
+        <div class="item" id="delayRow"><div class="t"><b>停留时间</b><span>鼠标停多久开始取词</span></div>
+          <input type="range" min="200" max="1500" step="50" data-key="hover_delay_ms"><span class="val" id="delayVal"></span></div>
+      </div>
+      <div class="group">
+        <div class="item"><div class="t"><b>标出取到的词</b><span>在屏幕上给取到的那个词加一层浅色底</span></div>
+          <label class="switch"><input type="checkbox" data-key="highlight_word"><span></span></label></div>
+        <div class="item"><div class="t"><b>划词翻译按钮</b><span>选中一段文字后，旁边出现一个翻译按钮</span></div>
+          <label class="switch"><input type="checkbox" data-key="selection_button"><span></span></label></div>
+        <div class="item"><div class="t"><b>只取英文</b><span>指着中文时不弹浮窗</span></div>
+          <label class="switch"><input type="checkbox" data-key="capture_only_english"><span></span></label></div>
+      </div>
+      <div class="group"><div class="item"><div class="t"><b>取词引擎</b><span id="capStatus">检测中…</span></div>
+        <button class="btn" id="checkBtn">自检</button></div></div>
+    </section>
 
-  <div class="body">
-    <div class="card">
-      <h3>快捷键 <span class="hint">点键位后直接按新组合键</span></h3>
-      <div id="keys"></div>
-      <div class="row" style="border:none;padding-top:8px">
-        <div class="lbl" style="width:auto;color:#a08c6e;font-size:11.5px">绿色=注册正常　红色=被其他软件占用</div>
-        <div class="grow"></div>
-        <button class="btn" onclick="resetKeys()">恢复默认</button>
+    <section id="s-dicts">
+      <h2>词典</h2><p class="sub">按顺序合并显示；浮窗里每本词典一个标签</p>
+      <div class="callout" id="ecCallout">
+        <b>开源词库 ECDICT</b>
+        <p>77 万词条，带音标、考纲标签、柯林斯星级和词形变化。浮窗里的「简明」内容主要来自它，建议放在第一位。约 63 MB。</p>
+        <button class="btn primary" id="ecBtn">下载 ECDICT</button>
+        <div id="ecProg" style="display:none"><div class="bar"><i id="ecBar"></i></div><div class="prog" id="ecMsg"></div></div>
       </div>
-    </div>
+      <div class="group" id="dictList"></div>
+      <div class="row-actions"><button class="btn" id="addDict">添加词典文件…</button></div>
+      <p class="sub" style="margin-top:14px">支持 MDict（.mdx，同目录的 .mdd 提供发音、图片、样式）和 ECDICT（.csv / .db）。</p>
+    </section>
 
-    <div class="card">
-      <h3>词典 <span class="hint" id="dictHint"></span></h3>
-      <div id="dicts"></div>
-      <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap">
-        <button class="btn" onclick="addDict()">＋ 添加词典文件</button>
-        <button class="btn" id="ecdictBtn" onclick="downloadEcdict()" title="skywind3000/ECDICT，MIT 开源，77 万词条，带音标、考纲和词频">下载开源词库 ECDICT（约 63MB）</button>
-        <span class="dim" id="dictNote">支持 .mdx（欧路、GoldenDict 同款格式），以及 ECDICT 的 .csv / .db</span>
-      </div>
-      <div class="prog" id="ecdictProg"><i></i></div>
-    </div>
+    <section id="s-keys">
+      <h2>快捷键</h2><p class="sub">点一下快捷键框，直接按新的组合键（至少带 Ctrl / Alt / Win 之一）</p>
+      <div class="group" id="keyList"></div>
+    </section>
 
-    <div class="card">
-      <h3>取词习惯</h3>
-      <div class="row">
-        <div class="lbl">鼠标自动取词<span class="sub">停在单词上就弹释义</span></div>
-        <div class="grow"></div>
-        <label class="sw"><input type="checkbox" id="autoCapture"><span></span></label>
+    <section id="s-voice">
+      <h2>翻译与发音</h2><p class="sub">&nbsp;</p>
+      <div class="group">
+        <div class="item"><div class="t"><b>发音口音</b><span>取词后自动发音、默认朗读用这个</span></div>
+          <div class="seg" data-key="accent"><button data-v="us">美式</button><button data-v="uk">英式</button></div></div>
+        <div class="item"><div class="t"><b>取词后自动发音</b></div>
+          <label class="switch"><input type="checkbox" data-key="auto_speak"><span></span></label></div>
       </div>
-      <div class="row">
-        <div class="lbl">取词方式<span class="sub">按住某个键才取词，看文章时不会乱弹</span></div>
-        <div class="grow"></div>
-        <div class="seg" id="modSeg">
-          <button data-mod="">停住就取</button>
-          <button data-mod="ctrl">按住 Ctrl</button>
-          <button data-mod="shift">按住 Shift</button>
-          <button data-mod="alt">按住 Alt</button>
-        </div>
+      <div class="group">
+        <div class="item"><div class="t"><b>联网翻译</b><span>关掉后整句翻译只列出句中生词</span></div>
+          <label class="switch"><input type="checkbox" data-key="online_translate"><span></span></label></div>
+        <div class="item"><div class="t"><b>百度翻译 APP ID</b><span>选填。国内网络推荐，在 fanyi-api.baidu.com 免费申请</span></div>
+          <input type="text" data-key="baidu_appid" spellcheck="false"></div>
+        <div class="item"><div class="t"><b>百度翻译密钥</b></div>
+          <input type="password" data-key="baidu_key" spellcheck="false"></div>
       </div>
-      <div class="row">
-        <div class="lbl">只取英文单词<span class="sub">中文不弹窗，走查词窗</span></div>
-        <div class="grow"></div>
-        <label class="sw"><input type="checkbox" id="onlyEnglish"><span></span></label>
-      </div>
-      <div class="row">
-        <div class="lbl">悬停触发延时<span class="sub">「停住就取」时停多久才取词</span></div>
-        <div class="grow"></div>
-        <input type="range" id="hoverDelay" min="300" max="1500" step="100">
-        <span class="val" id="hoverVal">600 毫秒</span>
-      </div>
-    </div>
+    </section>
 
-    <div class="card">
-      <h3>释义显示</h3>
-      <div class="row">
-        <div class="lbl">排版<span class="sub">原版：词典自带样式、图片、例句发音</span></div>
-        <div class="grow"></div>
-        <div class="seg" id="renderSeg">
-          <button data-render="rich">原版排版</button>
-          <button data-render="simple">简洁文字</button>
-        </div>
+    <section id="s-look">
+      <h2>外观</h2><p class="sub">&nbsp;</p>
+      <div class="group">
+        <div class="item"><div class="t"><b>主题</b></div>
+          <div class="seg" data-key="theme"><button data-v="system">跟随系统</button><button data-v="light">浅色</button><button data-v="dark">深色</button></div></div>
+        <div class="item"><div class="t"><b>释义字号</b></div>
+          <input type="range" min="0.8" max="1.6" step="0.05" data-key="font_scale"><span class="val" id="scaleVal"></span></div>
       </div>
-      <div class="row">
-        <div class="lbl">释义字号<span class="sub">查词窗右上角 A− / A+ 也能调</span></div>
-        <div class="grow"></div>
-        <input type="range" id="fontScale" min="0.8" max="1.8" step="0.1">
-        <span class="val" id="fontVal">100%</span>
-      </div>
-    </div>
+    </section>
 
-    <div class="card">
-      <h3>翻译与发音</h3>
-      <div class="row">
-        <div class="lbl">联网整句翻译<span class="sub">关掉就只用本地词典</span></div>
-        <div class="grow"></div>
-        <label class="sw"><input type="checkbox" id="onlineTranslate"><span></span></label>
+    <section id="s-general">
+      <h2>通用</h2><p class="sub">&nbsp;</p>
+      <div class="group">
+        <div class="item"><div class="t"><b>开机自动启动</b></div>
+          <label class="switch"><input type="checkbox" data-key="autostart"><span></span></label></div>
+        <div class="item"><div class="t"><b>隐藏托盘图标</b><span>隐藏后用退出快捷键关闭程序；重启后生效</span></div>
+          <label class="switch"><input type="checkbox" data-key="hide_tray_icon"><span></span></label></div>
       </div>
-      <div class="row">
-        <div class="lbl">百度翻译 APP ID<span class="sub">选填；国内网络推荐，填了优先用</span></div>
-        <div class="grow"></div>
-        <input class="txt" id="baiduAppid" placeholder="在 fanyi-api.baidu.com 免费申请" autocomplete="off" spellcheck="false">
-      </div>
-      <div class="row">
-        <div class="lbl">百度翻译密钥<span class="sub">只保存在本机配置文件里</span></div>
-        <div class="grow"></div>
-        <input class="txt" id="baiduKey" type="password" autocomplete="off" spellcheck="false">
-      </div>
-      <div class="row">
-        <div class="lbl">取词后自动发音<span class="sub">浮窗弹出时读一遍单词</span></div>
-        <div class="grow"></div>
-        <label class="sw"><input type="checkbox" id="autoSpeak"><span></span></label>
-      </div>
-      <div class="row">
-        <div class="lbl">默认发音<span class="sub">例句朗读、生词本发音用的口音</span></div>
-        <div class="grow"></div>
-        <div class="seg" id="accentSeg">
-          <button data-accent="uk">英式</button>
-          <button data-accent="us">美式</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>其他</h3>
-      <div class="row">
-        <div class="lbl">开机自动启动</div>
-        <div class="grow"></div>
-        <label class="sw"><input type="checkbox" id="autostart"><span></span></label>
-      </div>
-      <div class="row">
-        <div class="lbl">隐藏托盘图标<span class="sub">之后用 <span data-hk-spec="quit">Ctrl+Alt+Q</span> 退出</span></div>
-        <div class="grow"></div>
-        <label class="sw"><input type="checkbox" id="hideTray"><span></span></label>
-      </div>
-      <div class="row">
-        <div class="lbl">数据目录<span class="sub">配置、生词本、导出文件都在这里</span></div>
-        <div class="grow dim" id="dataDir" style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
-        <button class="btn" onclick="window.pywebview.api.open_folder('data')">打开</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="foot">
-    <div class="state" id="state">设置会写入数据目录的 config.json</div>
-    <button class="btn" onclick="closeMe()">关闭</button>
-    <button class="btn primary" id="saveBtn" onclick="saveAll()">保存并应用</button>
+      <div class="group"><div class="item"><div class="t"><b>数据文件夹</b><span id="dataDir" class="kv"></span></div>
+        <button class="btn" id="openData">打开</button></div></div>
+    </section>
   </div>
 </div>
-
+<script src="common.js"></script>
 <script>
-  var DEFAULT_KEYS = {
-    lookup: "ctrl+alt+d",
-    translate: "ctrl+alt+t",
-    capture: "ctrl+alt+e",
-    toggle_auto: "ctrl+alt+s",
-    add_vocab: "ctrl+alt+b",
-    quit: "ctrl+alt+q"
-  };
-  var KEY_LABELS = {
-    lookup: ["快捷查词", "打开查词窗"],
-    translate: ["翻译选中内容", "选中文字后按下"],
-    capture: ["立即取词", "取鼠标下的词"],
-    toggle_auto: ["自动取词开关", "开 / 关"],
-    add_vocab: ["收藏生词", "把当前词收进生词本"],
-    quit: ["退出程序", "完全关闭"]
-  };
-  var data = { hotkeys: {}, dictionaries: [], accent: "us", capture_modifier: "" };
-  var listening = null;
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var S = null;
+  var KEY_ORDER = ["lookup", "translate", "capture", "add_vocab", "toggle_auto", "quit"];
 
-  function esc(s) {
-    return (s || "").toString().replace(/[&<>"]/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+  document.querySelector("nav").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-s]"); if (!b) return;
+    document.querySelectorAll("nav button").forEach(function (x) { x.classList.toggle("on", x === b); });
+    document.querySelectorAll("section").forEach(function (s) { s.classList.toggle("on", s.id === "s-" + b.getAttribute("data-s")); });
+  });
+
+  function save(payload, quiet) {
+    return WW.api().save_settings(payload).then(function (r) {
+      if (!r.ok) { WW.toast(r.error || "保存失败"); WW.render(S); return r; }
+      S = r.settings; WW.render(S);
+      if (!quiet) WW.toast(r.message || "已保存");
+      return r;
     });
   }
-  function pretty(spec) {
-    if (!spec) return "未设置";
-    return spec.split("+").map(function (p) {
-      var m = { ctrl: "Ctrl", alt: "Alt", shift: "Shift", win: "Win" };
-      return m[p] || p.toUpperCase();
-    }).join(" + ");
-  }
-  function flash(text, ok) {
-    var b = document.getElementById("bar");
-    b.textContent = text;
-    b.className = "bar " + (ok ? "ok" : "err");
-    clearTimeout(window._flashT);
-    window._flashT = setTimeout(function () { b.className = "bar"; }, 6000);
-  }
 
-  function renderKeys() {
-    var box = document.getElementById("keys");
-    var html = "";
-    Object.keys(KEY_LABELS).map(function (a) { return a; }).forEach(function (action) {
-      var info = data.hotkeys[action] || {};
-      var spec = info.spec || "";
-      var dot = info.ok === true ? "ok" : (info.ok === false ? "bad" : "none");
-      html += '<div class="row">' +
-        '<div class="lbl">' + KEY_LABELS[action][0] + '<span class="sub">' + KEY_LABELS[action][1] + '</span></div>' +
-        '<div class="grow"></div>' +
-        '<button class="key" id="key-' + action + '" onclick="startListen(\'' + action + '\')">' + pretty(spec) + '</button>' +
-        '<span class="dot ' + dot + '" id="dot-' + action + '" title="' + (dot === "ok" ? "注册正常" : dot === "bad" ? "被占用" : "未知") + '"></span>' +
-        '</div>';
-    });
-    box.innerHTML = html;
-  }
-
-  function startListen(action) {
-    if (listening) {
-      var old = document.getElementById("key-" + listening);
-      if (old) old.classList.remove("listen");
-    }
-    listening = action;
-    var el = document.getElementById("key-" + action);
-    el.classList.add("listen");
-    el.textContent = "请按新组合键…";
-  }
-
-  document.addEventListener("keydown", function (e) {
-    if (!listening) {
-      if (e.key === "Escape") closeMe();
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key === "Escape") {
-      var el = document.getElementById("key-" + listening);
-      if (el) { el.classList.remove("listen"); el.textContent = pretty(data.hotkeys[listening].spec); }
-      listening = null;
-      return;
-    }
-    if (["Control", "Alt", "Shift", "Meta"].indexOf(e.key) >= 0) return;
-    var mods = [];
-    if (e.ctrlKey) mods.push("ctrl");
-    if (e.altKey) mods.push("alt");
-    if (e.shiftKey) mods.push("shift");
-    if (e.metaKey) mods.push("win");
-    if (!(e.ctrlKey || e.altKey || e.metaKey)) { flash("快捷键至少要带 Ctrl / Alt / Win 之一（只带 Shift 会影响正常打字）", false); return; }
-    // 用物理键位（e.code）而不是 e.key：按着 Shift/Alt 时 e.key 会变成符号或大写
-    var name = keyName(e.code);
-    if (!name) { flash("这个键不能当快捷键，请用字母、数字或 F1–F12", false); return; }
-    var spec = mods.join("+") + "+" + name;
-    var dup = Object.keys(data.hotkeys).filter(function (a) {
-      return a !== listening && data.hotkeys[a] && data.hotkeys[a].spec === spec;
-    })[0];
-    if (dup) { flash("和「" + KEY_LABELS[dup][0] + "」重复了，换一个组合", false); return; }
-    data.hotkeys[listening].spec = spec;
-    data.hotkeys[listening].ok = null;
-    var el2 = document.getElementById("key-" + listening);
-    if (el2) { el2.classList.remove("listen"); el2.textContent = pretty(spec); }
-    var dot = document.getElementById("dot-" + listening);
-    if (dot) dot.className = "dot none";
-    listening = null;
-  }, true);
-
-  function keyName(code) {
-    if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
-    if (/^Digit[0-9]$/.test(code)) return code.slice(5);
-    if (/^F([1-9]|1[0-2])$/.test(code)) return code.toLowerCase();
-    if (code === "Space") return "space";
-    if (code === "Tab") return "tab";
-    return null;
-  }
-
-  function resetKeys() {
-    Object.keys(DEFAULT_KEYS).forEach(function (a) {
-      if (!data.hotkeys[a]) data.hotkeys[a] = {};
-      data.hotkeys[a].spec = DEFAULT_KEYS[a];
-      data.hotkeys[a].ok = null;
-    });
-    renderKeys();
-    flash("已恢复默认键位，记得点「保存并应用」", true);
-  }
-
-  function renderDicts() {
-    var box = document.getElementById("dicts");
-    if (!data.dictionaries.length) {
-      box.innerHTML = '<div class="dim">还没有词典，点下面「添加词典文件」选 .mdx</div>';
-    } else {
-      var html = "";
-      data.dictionaries.forEach(function (d, i) {
-        html += '<div class="dict' + (d.missing ? ' missing' : '') + '">' +
-          '<div class="dn" title="' + esc(d.path) + '">' + esc(d.name) + '</div>' +
-          '<div class="dm" title="' + esc(d.path) + '">' +
-            (d.missing ? "找不到文件，请删除或重新添加" : d.count ? Number(d.count).toLocaleString() + " 条" : "待加载") +
-            ' · ' + esc(d.path.split("\\").slice(-1)[0]) + '</div>' +
-          '<div class="ops">' +
-            '<button class="btn" onclick="moveDict(' + i + ',-1)" ' + (i === 0 ? "disabled" : "") + '>↑</button>' +
-            '<button class="btn" onclick="moveDict(' + i + ',1)" ' + (i === data.dictionaries.length - 1 ? "disabled" : "") + '>↓</button>' +
-            '<button class="btn" onclick="delDict(' + i + ')">删除</button>' +
-          '</div></div>';
+  // 开关、分段、滑块：改了就保存
+  document.querySelectorAll("[data-key]").forEach(function (el) {
+    var key = el.getAttribute("data-key");
+    if (el.classList.contains("seg")) {
+      el.addEventListener("click", function (e) {
+        var b = e.target.closest("button"); if (!b) return;
+        var p = {}; p[key] = b.getAttribute("data-v"); save(p, true);
       });
-      box.innerHTML = html;
+    } else if (el.type === "checkbox") {
+      el.addEventListener("change", function () { var p = {}; p[key] = el.checked; save(p, true); });
+    } else if (el.type === "range") {
+      el.addEventListener("input", function () { showVals(key, el.value); });
+      el.addEventListener("change", function () { var p = {}; p[key] = parseFloat(el.value); save(p, true); });
+    } else {
+      el.addEventListener("change", function () { var p = {}; p[key] = el.value.trim(); save(p); });
     }
-    var total = data.dictionaries.reduce(function (s, d) { return s + (d.count || 0); }, 0);
-    document.getElementById("dictHint").textContent =
-      data.dictionaries.length + " 本" + (total ? " · 共 " + total.toLocaleString() + " 条" : "");
-  }
-
-  function moveDict(i, delta) {
-    var j = i + delta;
-    if (j < 0 || j >= data.dictionaries.length) return;
-    var t = data.dictionaries[i];
-    data.dictionaries[i] = data.dictionaries[j];
-    data.dictionaries[j] = t;
-    renderDicts();
-  }
-  function delDict(i) {
-    var d = data.dictionaries[i];
-    if (!d) return;
-    data.dictionaries.splice(i, 1);
-    renderDicts();
-    flash("已移除「" + d.name + "」，点「保存并应用」生效", true);
-  }
-  function addDict() {
-    window.pywebview.api.pick_dictionary().then(function (res) {
-      if (!res) return;
-      if (res.error) { flash(res.error, false); return; }
-      var exists = data.dictionaries.some(function (d) { return d.path === res.path; });
-      if (exists) { flash("这本词典已经在列表里了", false); return; }
-      data.dictionaries.push(res);
-      renderDicts();
-      flash("已添加「" + res.name + "」，点「保存并应用」后开始加载", true);
-    });
-  }
-
-  function setRender(m) {
-    data.render_mode = m;
-    document.querySelectorAll("#renderSeg button").forEach(function (b) {
-      b.classList.toggle("on", b.dataset.render === m);
-    });
-  }
-  document.addEventListener("click", function (e) {
-    var b = e.target.closest && e.target.closest("#renderSeg button");
-    if (b) setRender(b.dataset.render);
   });
-  document.getElementById("fontScale").addEventListener("input", function () {
-    document.getElementById("fontVal").textContent = Math.round(this.value * 100) + "%";
-  });
-
-  function setMod(m) {
-    data.capture_modifier = m;
-    document.querySelectorAll("#modSeg button").forEach(function (b) {
-      b.classList.toggle("on", b.dataset.mod === m);
-    });
+  function showVals(key, v) {
+    if (key === "hover_delay_ms") $("delayVal").textContent = Math.round(v) + " 毫秒";
+    if (key === "font_scale") $("scaleVal").textContent = Math.round(v * 100) + "%";
   }
-  document.addEventListener("click", function (e) {
-    var b = e.target.closest && e.target.closest("#modSeg button");
-    if (b) setMod(b.dataset.mod);
-  });
 
-  function downloadEcdict() {
-    var btn = document.getElementById("ecdictBtn");
-    btn.disabled = true;
-    window.pywebview.api.download_ecdict().then(function (res) {
-      if (!res || !res.ok) { btn.disabled = false; flash((res && res.error) || "启动下载失败", false); }
+  WW.render = function (s) {
+    if (!s) return;
+    S = s;
+    if (s.prefs) WW.setPrefs(s.prefs);
+    document.querySelectorAll("[data-key]").forEach(function (el) {
+      var key = el.getAttribute("data-key"), v = s[key];
+      if (el.classList.contains("seg")) el.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-v") === String(v)); });
+      else if (el.type === "checkbox") el.checked = !!v;
+      else if (el.type === "range") { el.value = v; showVals(key, v); }
+      else if (document.activeElement !== el) el.value = v || "";
     });
-  }
-  window.ecdictProgress = function (p) {
-    var bar = document.getElementById("ecdictProg");
-    bar.style.display = p.done ? "none" : "block";
-    bar.firstElementChild.style.width = (p.pct || 0) + "%";
-    document.getElementById("dictNote").textContent = p.msg || "";
-    if (p.done) {
-      document.getElementById("ecdictBtn").disabled = false;
-      flash(p.msg, p.ok);
-    }
+    var mod = (s.capture_modifier || "shift"); mod = mod.charAt(0).toUpperCase() + mod.slice(1);
+    $("modeHint").textContent = { modifier: "按住 " + mod + " 指向单词才取词，读文章时不会乱弹", hover: "鼠标停在单词上就取词", off: "只用快捷键取词" }[s.capture_mode] || "";
+    $("modRow").style.display = s.capture_mode === "modifier" ? "" : "none";
+    $("delayRow").style.display = s.capture_mode === "hover" ? "" : "none";
+    var c = s.capture || {};
+    $("capStatus").textContent = c.ocr === undefined ? "取词服务启动中…" :
+      [(c.uia ? "系统文字接口 ✓" : "系统文字接口 ✗"), (c.ocr ? c.ocr + (c.ocr_language ? "（" + c.ocr_language + "）" : "") + " ✓" : "文字识别 ✗")].join("　");
+    $("dataDir").textContent = s.data_dir || "";
+    renderDicts(s); renderKeys(s); renderEcdict(s.ecdict || {}, s.has_ecdict);
   };
 
-  function setAccent(a) {
-    data.accent = a;
-    document.querySelectorAll("#accentSeg button").forEach(function (b) {
-      b.classList.toggle("on", b.dataset.accent === a);
-    });
+  // ---------- 词典 ----------
+  function renderDicts(s) {
+    var list = s.dictionaries || [];
+    if (!list.length) { $("dictList").innerHTML = '<div class="dict"><div class="n"><span>还没有词典</span></div></div>'; return; }
+    $("dictList").innerHTML = list.map(function (d, i) {
+      var info = d.missing ? '<span class="bad">找不到文件：' + WW.esc(d.path) + "</span>" :
+        "<span>" + (d.count ? d.count.toLocaleString() + " 条 · " : (s.engine_ready ? "没加载上 · " : "加载中 · ")) + WW.esc(d.path) + "</span>";
+      return '<div class="dict"><div class="n"><b>' + WW.esc(d.name) + '<span class="badge">' + d.kind + "</span></b>" + info + '</div><div class="ops">' +
+        '<button class="icon-btn" data-mv="' + i + '" data-d="-1" title="上移"' + (i === 0 ? " disabled" : "") + '><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="m6 14 6-6 6 6"/></svg></button>' +
+        '<button class="icon-btn" data-mv="' + i + '" data-d="1" title="下移"' + (i === list.length - 1 ? " disabled" : "") + '><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="m6 10 6 6 6-6"/></svg></button>' +
+        '<button class="icon-btn" data-rm="' + i + '" title="移除">' + WW.icon("x") + "</button></div></div>";
+    }).join("");
   }
-  document.addEventListener("click", function (e) {
-    if (e.target.closest && e.target.closest("#accentSeg button")) {
-      setAccent(e.target.closest("#accentSeg button").dataset.accent);
+  function dictPayload(list) { return { dictionaries: list.map(function (d) { return { path: d.path, name: d.name }; }) }; }
+  $("dictList").addEventListener("click", function (e) {
+    var t = e.target.closest("[data-mv],[data-rm]"); if (!t || !S) return;
+    var list = S.dictionaries.slice();
+    if (t.hasAttribute("data-rm")) list.splice(parseInt(t.getAttribute("data-rm"), 10), 1);
+    else {
+      var i = parseInt(t.getAttribute("data-mv"), 10), j = i + parseInt(t.getAttribute("data-d"), 10);
+      if (j < 0 || j >= list.length) return;
+      var x = list[i]; list[i] = list[j]; list[j] = x;
     }
+    save(dictPayload(list));
+  });
+  $("addDict").addEventListener("click", function () {
+    WW.api().pick_dictionary().then(function (d) {
+      if (!d) return;
+      if (d.error) { WW.toast(d.error); return; }
+      var list = S.dictionaries.slice();
+      if (list.some(function (x) { return x.path === d.path; })) { WW.toast("这本词典已经在列表里了"); return; }
+      if (d.kind === "ECDICT") list.unshift(d); else list.push(d);
+      save(dictPayload(list));
+    });
   });
 
-  window.renderSettings = function (d) {
-    data = d;
-    renderKeys();
-    renderDicts();
-    document.getElementById("autoCapture").checked = !!d.auto_capture;
-    document.getElementById("onlyEnglish").checked = !!d.capture_only_english;
-    document.getElementById("onlineTranslate").checked = d.online_translate !== false;
-    document.getElementById("autostart").checked = !!d.autostart;
-    document.getElementById("hideTray").checked = !!d.hide_tray_icon;
-    var delay = d.hover_delay_ms || 600;
-    document.getElementById("hoverDelay").value = delay;
-    document.getElementById("hoverVal").textContent = delay + " 毫秒";
-    setAccent(d.accent === "uk" ? "uk" : "us");
-    setMod(d.capture_modifier || "");
-    setRender(d.render_mode === "simple" ? "simple" : "rich");
-    document.getElementById("fontScale").value = d.font_scale || 1;
-    document.getElementById("fontVal").textContent = Math.round((d.font_scale || 1) * 100) + "%";
-    document.getElementById("autoSpeak").checked = !!d.auto_speak;
-    document.getElementById("baiduAppid").value = d.baidu_appid || "";
-    document.getElementById("baiduKey").value = d.baidu_key || "";
-    document.getElementById("dataDir").textContent = d.data_dir || "";
-    document.getElementById("dataDir").title = d.data_dir || "";
-    var quit = d.hotkeys && d.hotkeys.quit;
-    document.querySelectorAll('[data-hk-spec="quit"]').forEach(function (el) {
-      el.textContent = pretty(quit && quit.spec);
-    });
-    if (d.ecdict && d.ecdict.running) {
-      document.getElementById("ecdictBtn").disabled = true;
-      window.ecdictProgress({ pct: d.ecdict.pct, msg: d.ecdict.msg });
-    }
-    document.getElementById("state").textContent =
-      "配置目录：" + (d.config_path || "程序目录") + "　·　保存即生效";
+  function renderEcdict(st, has) {
+    $("ecCallout").style.display = has && !st.running ? "none" : "";
+    $("ecBtn").disabled = !!st.running;
+    $("ecProg").style.display = st.running || st.msg ? "" : "none";
+    $("ecBar").style.width = (st.pct || 0) + "%";
+    $("ecMsg").textContent = st.msg || "";
+  }
+  WW.ecdictProgress = function (p) {
+    $("ecProg").style.display = "";
+    $("ecBar").style.width = (p.pct || 0) + "%";
+    $("ecMsg").textContent = p.msg || "";
+    $("ecBtn").disabled = !p.done;
+    if (p.done && !p.ok) $("ecBtn").textContent = "重试下载";
   };
-
-  document.getElementById("hoverDelay").addEventListener("input", function () {
-    document.getElementById("hoverVal").textContent = this.value + " 毫秒";
+  $("ecBtn").addEventListener("click", function () {
+    WW.api().download_ecdict().then(function (r) { if (!r.ok) WW.toast(r.error); else WW.ecdictProgress({ pct: 0, msg: "准备下载…" }); });
   });
 
-  function saveAll() {
-    var btn = document.getElementById("saveBtn");
-    btn.disabled = true;
-    btn.textContent = "保存中…";
-    var payload = {
-      hotkeys: {},
-      dictionaries: data.dictionaries.map(function (d) {
-        return { path: d.path, name: d.name };
-      }),
-      auto_capture: document.getElementById("autoCapture").checked,
-      capture_only_english: document.getElementById("onlyEnglish").checked,
-      hover_delay_ms: parseInt(document.getElementById("hoverDelay").value, 10),
-      online_translate: document.getElementById("onlineTranslate").checked,
-      accent: data.accent,
-      capture_modifier: data.capture_modifier || "",
-      render_mode: data.render_mode || "rich",
-      font_scale: parseFloat(document.getElementById("fontScale").value) || 1,
-      auto_speak: document.getElementById("autoSpeak").checked,
-      baidu_appid: document.getElementById("baiduAppid").value.trim(),
-      baidu_key: document.getElementById("baiduKey").value.trim(),
-      autostart: document.getElementById("autostart").checked,
-      hide_tray_icon: document.getElementById("hideTray").checked
-    };
-    Object.keys(data.hotkeys).forEach(function (a) {
-      if (data.hotkeys[a] && data.hotkeys[a].spec) payload.hotkeys[a] = data.hotkeys[a].spec;
-    });
-    window.pywebview.api.save_settings(payload).then(function (res) {
-      btn.disabled = false;
-      btn.textContent = "保存并应用";
-      if (!res || res.ok === false) {
-        flash((res && res.error) || "保存失败", false);
-        return;
-      }
-      flash(res.message || "已保存", true);
-      document.getElementById("state").textContent = res.detail || "";
-      if (res.hotkeys) { data.hotkeys = res.hotkeys; renderKeys(); }
-      if (res.dictionaries) { data.dictionaries = res.dictionaries; renderDicts(); }
-    });
+  // ---------- 快捷键 ----------
+  function prettyKey(spec) {
+    if (!spec) return "未设置";
+    return spec.split("+").map(function (p) { return { ctrl: "Ctrl", alt: "Alt", shift: "Shift", win: "Win" }[p] || p.toUpperCase(); }).join(" + ");
   }
-
-  function closeMe() { window.pywebview.api.close_window("settings"); }
-
-  window.addEventListener("pywebviewready", function () {
-    window.pywebview.api.get_settings().then(function (d) { if (d) window.renderSettings(d); });
+  function renderKeys(s) {
+    var hk = s.hotkeys || {};
+    $("keyList").innerHTML = KEY_ORDER.filter(function (a) { return hk[a]; }).map(function (a) {
+      var h = hk[a], cls = h.ok === true ? "dot" : h.ok === false ? "dot bad" : "dot unk";
+      var tip = h.ok === false ? "被别的软件占用了，换一个" : h.ok === true ? "正常" : "";
+      return '<div class="item"><span class="' + cls + '" title="' + tip + '"></span><div class="t"><b>' + WW.esc(h.label) + "</b>" +
+        (h.ok === false ? '<span class="bad" style="color:var(--danger)">被别的软件占用了，换一个</span>' : "") +
+        '</div><input class="hk" readonly data-hk="' + a + '" value="' + WW.esc(prettyKey(h.spec)) + '"></div>';
+    }).join("");
+  }
+  $("keyList").addEventListener("focusin", function (e) {
+    var el = e.target.closest("[data-hk]"); if (!el) return;
+    el.classList.add("rec"); el.value = "按下新的组合键…";
   });
-  if (window.pywebview && window.pywebview.api) {
-    window.pywebview.api.get_settings().then(function (d) { if (d) window.renderSettings(d); });
-  }
+  $("keyList").addEventListener("focusout", function (e) {
+    var el = e.target.closest("[data-hk]"); if (!el) return;
+    el.classList.remove("rec");
+    if (S) el.value = prettyKey(S.hotkeys[el.getAttribute("data-hk")].spec);
+  });
+  $("keyList").addEventListener("keydown", function (e) {
+    var el = e.target.closest("[data-hk]"); if (!el) return;
+    e.preventDefault();
+    if (e.key === "Escape") { el.blur(); return; }
+    var k = e.key.length === 1 ? e.key.toLowerCase() : /^F\d{1,2}$/.test(e.key) ? e.key.toLowerCase() : e.key === " " ? "space" : null;
+    if (!k || !/^[a-z0-9]$|^f\d{1,2}$|^space$/.test(k)) return;
+    var parts = [];
+    if (e.ctrlKey) parts.push("ctrl"); if (e.altKey) parts.push("alt"); if (e.shiftKey) parts.push("shift"); if (e.metaKey) parts.push("win");
+    if (!e.ctrlKey && !e.altKey && !e.metaKey) { el.value = "要带 Ctrl / Alt / Win"; return; }
+    parts.push(k);
+    var p = { hotkeys: {} }; p.hotkeys[el.getAttribute("data-hk")] = parts.join("+");
+    el.blur();
+    save(p);
+  });
+
+  $("checkBtn").addEventListener("click", function () { WW.api().self_check(); WW.toast("正在生成自检报告…"); });
+  $("openData").addEventListener("click", function () { WW.api().open_folder("data"); });
+  WW.boot("settings", function () { WW.api().get_settings().then(WW.render); });
+})();
 </script>
 </body>
 </html>

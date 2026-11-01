@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
 """词典原版排版：读取 .mdd 资源（发音、图片、样式），把词条 HTML 改写成能在界面里安全显示的样子。
 
-和 GoldenDict 的做法一样：
 - 同目录的 xxx.mdd / xxx.1.mdd … 以及散放在词典目录里的 css、图片都算资源
-- <link rel=stylesheet> 收集成样式表（url() 里的图片、字体内嵌成 data URI）
-- sound://… 改成 data-sound，点了由程序播放；entry://… 改成 data-entry，点了跳到那个词
+- 资源不再内嵌成 base64：页面通过本机资源服务按地址取（见 server.py），首次渲染不卡
+- sound://… 改成 data-sound，点了播放；entry://… 改成 data-entry，点了跳到那个词
 - 去掉脚本、事件属性、iframe 等，词典 HTML 只当内容显示
 """
 from __future__ import annotations
 
-import base64
 import mimetypes
 import re
 import threading
@@ -24,9 +22,8 @@ MIME = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
     ".svg": "image/svg+xml", ".webp": "image/webp", ".bmp": "image/bmp", ".ico": "image/x-icon",
     ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".otf": "font/otf",
-    ".css": "text/css",
+    ".css": "text/css; charset=utf-8", ".js": "text/javascript",
 }
-MAX_INLINE = 1_500_000  # 单个图片/字体超过这个大小就不内嵌
 
 
 def norm_key(ref: str) -> str:
@@ -50,6 +47,12 @@ def mime_of(ref: str) -> str:
     return MIME.get(ext) or mimetypes.guess_type(ref)[0] or "application/octet-stream"
 
 
+def ref_path(ref: str) -> str:
+    """资源引用 → 地址里的路径部分（正斜杠、逐段转义）。"""
+    ref = clean_ref(ref).replace("\\", "/").lstrip("/")
+    return "/".join(urllib.parse.quote(p) for p in ref.split("/") if p not in ("", ".", ".."))
+
+
 class Resources:
     """一本 mdx 词典的附属资源。"""
 
@@ -57,8 +60,6 @@ class Resources:
         self.dir = Path(mdx_path).resolve().parent
         self.stem = Path(mdx_path).stem
         self._mdds: list[tuple[object, list, dict[str, int]]] = []
-        self._data_uri: dict[str, str | None] = {}
-        self._css: dict[str, str] = {}
         self._lock = threading.Lock()
         self.errors: list[str] = []
         for p in self._mdd_paths():
@@ -87,13 +88,11 @@ class Resources:
     def has_mdd(self) -> bool:
         return bool(self._mdds)
 
-    def get(self, ref: str, base: str = "") -> bytes | None:
-        """取资源内容：先找词典目录里的散文件，再找 mdd。base 是引用它的 css 的路径（处理相对路径）。"""
+    def get(self, ref: str) -> bytes | None:
+        """取资源内容：先找词典目录里的散文件，再找 mdd。"""
         ref = clean_ref(ref)
         if not ref or re.match(r"^(https?:|data:)", ref, re.I):
             return None
-        if base and not ref.startswith(("/", "\\")):
-            ref = str(Path(clean_ref(base)).parent / ref)
         # 1. 散放的文件（只允许在词典目录里，防止 ../ 跳出去）
         try:
             p = (self.dir / ref.replace("\\", "/").lstrip("/")).resolve()
@@ -117,50 +116,24 @@ class Resources:
                     self.errors.append(f"{ref}: {e!r}")
         return None
 
-    def data_uri(self, ref: str, base: str = "") -> str | None:
-        k = f"{base}|{ref}"
-        if k not in self._data_uri:
-            data = self.get(ref, base)
-            if data is None or len(data) > MAX_INLINE:
-                self._data_uri[k] = None
-            else:
-                self._data_uri[k] = f"data:{mime_of(clean_ref(ref))};base64,{base64.b64encode(data).decode()}"
-        return self._data_uri[k]
 
-    def css(self, ref: str, depth: int = 0) -> str:
-        """取一个样式表，url() 内嵌、@import 展开、body/html 选择器改成词条根节点。"""
-        if ref in self._css:
-            return self._css[ref]
-        data = self.get(ref)
-        text = data.decode("utf-8", "ignore") if data else ""
-        text = rewrite_css(text, self, base=clean_ref(ref), depth=depth)
-        self._css[ref] = text
-        return text
-
-
-_URL_RE = re.compile(r"""url\(\s*(['"]?)([^'")]+)\1\s*\)""", re.I)
-_IMPORT_RE = re.compile(r"""@import\s+(?:url\()?\s*['"]?([^'")\s;]+)['"]?\s*\)?[^;]*;""", re.I)
-_SELECTOR_RE = re.compile(r"([^{}]+)\{")
-# 只在选择器位置把 html/body 换成词条根节点：一次性全局替换，比逐段回调快两个数量级
+# 只在选择器位置把 html/body 换成词条根节点（一次性全局替换，几十 KB 的样式表也是毫秒级）
 _ROOT_RE = re.compile(r"(?<![\w.#-])(html|body)(?![\w-])(?=[^{}]*\{)", re.I)
+_URL_RE = re.compile(r"""url\(\s*(['"]?)([^'")]+)\1\s*\)""", re.I)
 
 
-def rewrite_css(text: str, res: Resources | None, base: str = "", depth: int = 0) -> str:
-    if res is not None and depth < 3:
-        text = _IMPORT_RE.sub(lambda m: res.css(m.group(1), depth + 1)
-                              if not m.group(1).startswith("http") else "", text)
+def rewrite_css(text: str, url_for=None) -> str:
+    """样式表改写：html/body 选择器 → .ww-root；url_for 给出时把相对 url() 换成资源地址。
 
-    # 先改选择器（此时文本还是原始 CSS，几十 KB 量级），再内联 url()。
-    # 顺序反过来的话，内联出几 MB 的 base64 后还要跑一遍选择器正则，首次渲染会卡几分钟。
+    独立的 .css 文件由资源服务按原路径提供，里面的相对 url() 浏览器自己会解析，不用改。
+    """
     text = _ROOT_RE.sub(".ww-root", text)
-
-    if res is not None and depth < 3:
+    if url_for is not None:
         def url(m):
             ref = m.group(2).strip()
             if ref.startswith(("data:", "http:", "https:", "#")):
                 return m.group(0)
-            uri = res.data_uri(ref, base)
-            return f'url("{uri}")' if uri else "url()"
+            return f'url("{url_for(ref)}")'
         text = _URL_RE.sub(url, text)
     return text
 
@@ -172,14 +145,13 @@ VOID = {"area", "br", "col", "hr", "img", "source", "track", "wbr"}
 
 
 class _Rewriter(HTMLParser):
-    def __init__(self, res: Resources | None):
+    def __init__(self, url_for):
         super().__init__(convert_charrefs=False)
-        self.res = res
+        self.url_for = url_for
         self.out: list[str] = []
         self.css_refs: list[str] = []
         self.skip = 0
         self.in_style = False
-        self.has_sound = False
 
     def _attrs(self, tag: str, attrs) -> str:
         keep = []
@@ -193,36 +165,29 @@ class _Rewriter(HTMLParser):
                 continue
             if tag == "a" and name == "href":
                 if low.startswith("sound://"):
-                    keep.append(("data-sound", clean_ref(value)))
-                    keep.append(("href", "#"))
-                    self.has_sound = True
+                    keep += [("data-sound", clean_ref(value)), ("href", "#")]
                 elif low.startswith(("entry://", "bword://", "d:")):
                     target = urllib.parse.unquote(re.sub(r"^\w+://", "", value).strip())
                     if target.startswith("#"):  # 同一词条内的锚点
                         keep.append(("href", target))
                     else:
-                        keep.append(("data-entry", target.split("#")[0]))
-                        keep.append(("href", "#"))
+                        keep += [("data-entry", target.split("#")[0]), ("href", "#")]
                 elif low.startswith(("http://", "https://")):
-                    keep.append(("data-href", value))
-                    keep.append(("href", "#"))
+                    keep += [("data-href", value), ("href", "#")]
                 else:
                     keep.append(("href", value if value.startswith("#") else "#"))
                 continue
             if name in ("src", "data-src") and tag in ("img", "image", "source", "audio"):
                 if tag in ("source", "audio") and not low.startswith(("http", "data:")):
                     keep.append(("data-sound", clean_ref(value)))
-                    self.has_sound = True
                     continue
                 if low.startswith(("http:", "https:", "data:")):
                     keep.append(("src", value))
-                elif self.res is not None:
-                    uri = self.res.data_uri(value)
-                    if uri:
-                        keep.append(("src", uri))
+                else:
+                    keep += [("src", self.url_for(value)), ("loading", "lazy")]
                 continue
-            if name == "style" and self.res is not None and "url(" in low:
-                value = rewrite_css(value, self.res)
+            if name == "style" and "url(" in low:
+                value = rewrite_css(value, self.url_for)
             keep.append((name, value))
         return "".join(f' {n}="{escape(v, quote=True)}"' for n, v in keep)
 
@@ -271,7 +236,7 @@ class _Rewriter(HTMLParser):
             return
         data = data.replace("\x00", "")
         if self.in_style:
-            self.out.append(rewrite_css(data, self.res))
+            self.out.append(rewrite_css(data, self.url_for))
         else:
             self.out.append(escape(data, quote=False))
 
@@ -287,12 +252,12 @@ class _Rewriter(HTMLParser):
         pass
 
 
-def rewrite_html(html: str, res: Resources | None) -> tuple[str, list[str], bool]:
-    """返回 (改写后的 HTML, 引用的样式表列表, 是否含发音链接)。"""
-    p = _Rewriter(res)
+def rewrite_html(html: str, url_for) -> tuple[str, list[str]]:
+    """返回 (改写后的 HTML, 引用的样式表地址列表)。url_for(ref) -> 资源地址。"""
+    p = _Rewriter(url_for)
     try:
         p.feed(html or "")
         p.close()
     except Exception:
-        return escape(re.sub(r"<[^>]+>", " ", html or "")), [], False
-    return "".join(p.out), p.css_refs, p.has_sound
+        return escape(re.sub(r"<[^>]+>", " ", html or "")), []
+    return "".join(p.out), [url_for(r) for r in p.css_refs]

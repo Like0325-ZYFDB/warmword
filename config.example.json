@@ -1,9 +1,7 @@
 {
   "dictionaries": [
-    {
-      "path": "C:\\词典\\oaldpe.mdx",
-      "name": "牛津高阶"
-    }
+    {"path": "C:\\Users\\你的用户名\\AppData\\Roaming\\Glance\\词库\\ecdict.csv", "name": "ECDICT"},
+    {"path": "C:\\词典\\oaldpe.mdx", "name": "牛津高阶"}
   ],
   "hotkeys": {
     "lookup": "ctrl+alt+d",
@@ -13,15 +11,20 @@
     "add_vocab": "ctrl+alt+b",
     "quit": "ctrl+alt+q"
   },
-  "auto_capture": true,
-  "capture_modifier": "",
+  "capture_mode": "modifier",
+  "capture_modifier": "shift",
+  "hover_delay_ms": 450,
   "capture_only_english": true,
-  "hover_delay_ms": 600,
+  "highlight_word": true,
+  "selection_button": true,
   "online_translate": true,
   "baidu_appid": "",
   "baidu_key": "",
+  "accent": "us",
+  "auto_speak": false,
+  "font_scale": 1.0,
+  "theme": "system",
   "autostart": true,
   "hide_tray_icon": false,
-  "accent": "us",
   "debug": false
 }

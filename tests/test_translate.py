@@ -2,7 +2,7 @@
 """翻译调度测试：用假来源，不联网。"""
 import time
 
-import translate as tr
+from glance import translate as tr
 
 
 def _slow_fail(text):
