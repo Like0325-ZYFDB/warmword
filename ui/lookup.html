@@ -33,6 +33,11 @@
   .dict-name { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-2);
     margin: 0 0 10px; letter-spacing: .02em; }
   .dict-name::before { content: ""; width: 3px; height: 13px; border-radius: 2px; background: var(--accent); }
+  .dict-name .grow { flex: 1; }
+  .style-toggle { font-weight: 400; font-size: 12px; color: var(--text-3); letter-spacing: 0; }
+  .style-toggle:hover { color: var(--accent-text); }
+  #cardBox .wc-senses .txt { font-size: calc(17px * var(--scale)); }
+  #cardBox .wc-senses .pos { font-size: calc(13.5px * var(--scale)); padding-top: 3px; }
   .welcome { padding: 60px 30px; text-align: center; color: var(--text-3); }
   .welcome .big { font: 600 22px var(--font-display); color: var(--text); margin-bottom: 8px; }
   .welcome kbd { font: 12px var(--font); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-2); background: var(--surface); color: var(--text-2); }
@@ -125,11 +130,13 @@
     }
     h += "</article>";
     (r.entries || []).forEach(function (e, i) {
-      h += '<article class="block" id="d' + i + '"><div class="dict-name">' + WW.esc(e.name) + '</div><div class="rich-host" id="rh' + i + '"></div></article>';
+      h += '<article class="block" id="d' + i + '"><div class="dict-name"><span>' + WW.esc(e.name) + '</span><span class="grow"></span>' +
+        '<a class="style-toggle" data-act="style">' + (WW.prefs.entry_style === "original" ? "清晰排版" : "原版排版") + "</a>" +
+        '</div><div class="rich-host" id="rh' + i + '"></div></article>';
     });
     body.innerHTML = h;
     (r.entries || []).forEach(function (e, i) {
-      WW.rich($("rh" + i), e, { word: search, headword: card.word });
+      WW.entry($("rh" + i), e, { word: search, headword: card.word });
     });
     var chips = (r.entries || []).length ? ['<button data-jump="cardBox">简明</button>'].concat(
       r.entries.map(function (e, i) { return '<button data-jump="d' + i + '">' + WW.esc(e.name) + "</button>"; })) : [];
@@ -195,9 +202,15 @@
   body.addEventListener("click", function (e) {
     var t = e.target.closest("[data-act]"); if (!t || !current) return;
     var act = t.getAttribute("data-act"), word = (current.card && current.card.word) || current.query;
-    if (act === "say") WW.say(word, t.getAttribute("data-accent"), t);
+    if (act === "say") WW.sayWord(current.card || { word: word }, t.getAttribute("data-accent"), t);
     else if (act === "word") search(t.getAttribute("data-word"), true);
     else if (act === "copy") { WW.api().copy(word); WW.toast("已复制 " + word); }
+    else if (act === "style") {
+      var top = $("content").scrollTop;
+      WW.api().set_entry_style(WW.prefs.entry_style === "original" ? "clear" : "original").then(function (p) {
+        WW.setPrefs(p); render(current); $("content").scrollTop = top;
+      });
+    }
     else if (act === "star") {
       var brief = ((current.card && current.card.senses) || []).slice(0, 3).map(function (s) { return (s.pos + " " + s.text).trim(); }).join("；");
       WW.api().vocab_toggle(word, brief).then(function (on) {

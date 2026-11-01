@@ -25,6 +25,7 @@ from .capture.clipboard import copy_selection_text, set_clipboard_text
 from .capture.geometry import place_card
 from .config import HOTKEY_LABELS, Config, apply_settings, hotkey_text
 from .dictionary import DictEngine, build_card, enrich_from_mdx
+from .dictionary.card import mdx_audio
 from .dictionary.resources import ref_path, rewrite_html
 from .hotkeys import HotkeyThread, valid_hotkey
 from .hover import HoverController, Inputs
@@ -33,7 +34,7 @@ from .paths import (BASE, DATA, DICT_DIR, EXPORT_DIR, FROZEN, HISTORY_PATH, INDE
                     UI_DIR, VOCAB_PATH, VOICE_DIR, migrate_old_data)
 from .server import ResourceServer
 from .store import History, Vocab
-from .textutil import clean_html
+from .textutil import clean_html, clear_html
 from .windows import WindowManager
 from .wordlist import pick_new_words
 
@@ -109,6 +110,9 @@ class App:
             self.highlight = Highlight(log=log)
         except Exception as e:
             log(f"[高亮] 不可用 {e!r}")
+        # 取词后自动发音是程序触发的，不是用户点的：要放开网页的「自动播放」限制，否则播不出声
+        os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
+            "--disable-features=ElasticOverscroll --autoplay-policy=no-user-gesture-required")
         self.wm.create_eager()
         webview.start(debug=bool(self.cfg.get("debug")))
         while not self.quit:  # 界面线程退出后仍保持托盘运行，直到从托盘退出
@@ -116,7 +120,10 @@ class App:
 
     def _after_start(self) -> None:
         time.sleep(2.5)
-        self.wm.kick("float")
+        self.wm.prime("float")
+        if self.cfg.get("selection_button", True):  # 划词按钮也提前备好，第一次划词就能出现
+            self.wm.create("selbtn")
+            self.wm.prime("selbtn")
         self.hotkeys.registered.wait(5)
         bad = [f"{HOTKEY_LABELS.get(a, a)}（{hotkey_text(self.cfg['hotkeys'].get(a, ''))}）"
                for a, ok in self.hotkeys.status.items() if not ok]
@@ -183,6 +190,7 @@ class App:
     def prefs(self) -> dict:
         return {"font_scale": float(self.cfg.get("font_scale", 1.0) or 1.0),
                 "accent": self.cfg.get("accent", "us"), "theme": self.cfg.get("theme", "system"),
+                "entry_style": self.cfg.get("entry_style", "clear"),
                 "hotkeys": {a: hotkey_text(s) for a, s in self.cfg["hotkeys"].items()},
                 "modifier": self.cfg.get("capture_modifier", "shift").capitalize(),
                 "capture_mode": self.cfg.get("capture_mode")}
@@ -195,8 +203,20 @@ class App:
             book = self.engine.book(e.source) if self.engine else None
             bid = book.id if book else ""
             html, css = rewrite_html(e.html, lambda ref, b=bid: self.server.res_url(b, ref_path(ref)))
-            out.append({"id": bid, "name": e.dict_name, "head": e.headword, "html": html, "css": css})
+            out.append({"id": bid, "name": e.dict_name, "head": e.headword, "html": html, "css": css,
+                        "clear": clear_html(e.html, e.headword)})
         return out
+
+    def word_audio(self, word: str, entries) -> dict:
+        """词典自带的单词录音（牛津等）：{"uk": 地址, "us": 地址}；按词典顺序取第一本有录音的。"""
+        for e in entries:
+            if (e.headword or "").casefold() != (word or "").casefold():
+                continue
+            refs = mdx_audio(e.html)
+            book = self.engine.book(e.source) if self.engine else None
+            if refs and book is not None:
+                return {k: self.server.res_url(book.id, ref_path(v)) for k, v in refs.items()}
+        return {}
 
     def search(self, word: str, record: bool = False, mdx_limit: int = 8) -> dict:
         word = (word or "").strip()
@@ -212,6 +232,7 @@ class App:
         card = build_card(self.engine, word)
         entries = self.engine.lookup_mdx(card["word"] if card["found"] else word)[:mdx_limit]
         card = enrich_from_mdx(card, entries)
+        card["audio"] = self.word_audio(card["word"], entries)
         out["card"] = card
         out["entries"] = self.entries_payload(entries)
         out["saved"] = self.vocab.has(card["word"])
@@ -386,8 +407,9 @@ class App:
         w = self.wm.wins["selbtn"]
         if w.window is None:
             self.wm.create("selbtn")
+            threading.Thread(target=self.wm.prime, args=("selbtn",), daemon=True).start()
             return  # 第一次只建窗口，下次划词就有了
-        if not w.ready.is_set():
+        if not w.primed:
             return
         scale = win32.scale_at(*pos)
         size = int(36 * scale)
@@ -525,7 +547,7 @@ class App:
             **{k: self.cfg.get(k) for k in (
                 "capture_mode", "capture_modifier", "hover_delay_ms", "capture_only_english",
                 "highlight_word", "selection_button", "online_translate", "baidu_appid", "baidu_key",
-                "accent", "auto_speak", "font_scale", "theme", "hide_tray_icon")},
+                "accent", "auto_speak", "font_scale", "theme", "entry_style", "hide_tray_icon")},
             "autostart": autostart.enabled(),
             "prefs": self.prefs(),
         }

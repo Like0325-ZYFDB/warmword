@@ -125,6 +125,10 @@ class Api:
             log(f"[设置] 保存失败 {e!r}")
             return {"ok": False, "error": f"保存失败：{e}"}
 
+    def set_entry_style(self, style: str) -> dict:
+        self._app.save_settings({"entry_style": style})
+        return self._app.prefs()
+
     def set_font_scale(self, scale: float) -> dict:
         self._app.save_settings({"font_scale": scale})
         return self._app.prefs()

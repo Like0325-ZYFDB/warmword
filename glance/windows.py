@@ -35,6 +35,7 @@ class Win:
         self.pending: dict[str, object] = {}   # 页面没准备好时积攒的推送：函数名 → 数据（只留最新）
         self.lock = threading.Lock()
         self.styled = False
+        self.primed = False
 
 
 class WindowManager:
@@ -109,27 +110,26 @@ class WindowManager:
                 win32.exclude_from_capture(hwnd)
             win32.round_corners(hwnd)
 
-    def kick(self, name: str) -> None:
-        """隐藏状态下页面迟迟没加载（有的系统上网页控件要显示过一次才初始化）：
-        在屏幕外不抢焦点地显示一下，加载完再收起。"""
+    def prime(self, name: str) -> None:
+        """浮窗类窗口建好后，在屏幕外不抢焦点地显示一下再收起。
+
+        界面库建隐藏窗口时会把网页控件标记成「不可见」，不显示一次它就不绘制（第一次取词是白框）。
+        显示一次之后改用 hide_keep_rendering 收起，网页控件一直保持绘制状态。
+        """
         w = self.wins[name]
-        if w.ready.is_set() or w.window is None:
+        if w.window is None:
             return
-        self.log(f"[窗口] {name} 页面还没加载，在屏幕外显示一下")
+        if not w.ready.wait(15):
+            self.log(f"[窗口] {name} 页面 15 秒还没加载完")
         if not w.hwnd:
             self._grab_hwnd(name)
-        if w.hwnd:
-            win32.show_at(w.hwnd, -32000, -32000)
-        else:
-            try:
-                w.window.show()
-                w.window.move(-32000, -32000)
-            except Exception as e:
-                self.log(f"[窗口] {name} 显示失败 {e!r}")
-        if w.ready.wait(10):
-            self._grab_hwnd(name)
-            if w.hwnd:
-                win32.hide(w.hwnd)
+        if not w.hwnd:
+            self.log(f"[窗口] {name} 拿不到窗口句柄")
+            return
+        win32.show_at(w.hwnd, -32000, -32000)
+        time.sleep(0.3)
+        win32.hide_keep_rendering(w.hwnd)
+        w.primed = True
 
     def ensure(self, name: str, timeout: float = 8.0) -> Win:
         """窗口建好、页面加载完（第一次打开某个窗口时要等它加载）。"""
@@ -216,7 +216,7 @@ class WindowManager:
         win = self.wins[name]
         if name in NATIVE:
             if win.hwnd:
-                win32.hide(win.hwnd)
+                win32.hide_keep_rendering(win.hwnd)
             return
         was_active = bool(win.hwnd) and win32.foreground() == win.hwnd
         try:

@@ -48,6 +48,7 @@ DEFAULT_CONFIG: dict = {
     "auto_speak": False,
     "font_scale": 1.0,
     "theme": "system",               # system / light / dark
+    "entry_style": "clear",          # clear = 清晰排版（统一层次）；original = 词典原版排版
     "autostart": True,
     "hide_tray_icon": False,
     "debug": False,
@@ -194,6 +195,8 @@ def apply_settings(cfg: dict, payload: dict, valid_hotkey) -> tuple[dict, str | 
         cfg["accent"] = payload["accent"]
     if payload.get("theme") in ("system", "light", "dark"):
         cfg["theme"] = payload["theme"]
+    if payload.get("entry_style") in ("clear", "original"):
+        cfg["entry_style"] = payload["entry_style"]
     for key in ("baidu_appid", "baidu_key"):
         if key in payload:
             v = str(payload[key] or "").strip()

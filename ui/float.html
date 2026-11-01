@@ -80,7 +80,9 @@
     entries.forEach(function (e, i) {
       h += '<button data-tab="' + i + '" class="' + (tab === i ? "on" : "") + '">' + WW.esc(e.name) + "</button>";
     });
-    h += '<span class="grow"></span><span class="hint">Esc 关闭</span>';
+    h += '<span class="grow"></span>' + (tab >= 0
+      ? '<button data-style="1" title="切换清晰排版 / 词典原版排版">' + (WW.prefs.entry_style === "original" ? "清晰排版" : "原版排版") + "</button>"
+      : '<span class="hint">Esc 关闭</span>');
     tabs.innerHTML = h;
   }
 
@@ -90,7 +92,7 @@
     $("rich").classList.toggle("hidden", i < 0);
     if (i >= 0) {
       var e = data.entries[i];
-      WW.rich($("richHost"), e, { word: function (w) { WW.api().float_word(w); }, headword: data.card && data.card.word });
+      WW.entry($("richHost"), e, { word: function (w) { WW.api().float_word(w); }, headword: data.card && data.card.word });
     }
     renderTabs();
     $("scroll").scrollTop = 0;
@@ -114,14 +116,20 @@
   };
   WW.reset = function () { pinned = false; };
   WW.setSaved = function (b) { saved = !!b; if (data) renderCard(); };
-  WW.speakHead = function () { if (data && data.card) WW.say(data.card.word); };
+  WW.speakHead = function () { if (data && data.card) WW.sayWord(data.card); };
 
   document.addEventListener("click", function (e) {
-    var t = e.target.closest("[data-act],[data-tab]");
+    var t = e.target.closest("[data-act],[data-tab],[data-style]");
     if (!t || !data) return;
+    if (t.hasAttribute("data-style")) {
+      WW.api().set_entry_style(WW.prefs.entry_style === "original" ? "clear" : "original").then(function (p) {
+        WW.setPrefs(p); showTab(tab); resize();
+      });
+      return;
+    }
     if (t.hasAttribute("data-tab")) { showTab(parseInt(t.getAttribute("data-tab"), 10)); resize(); setTimeout(resize, 400); return; }
     var act = t.getAttribute("data-act"), word = (data.card && data.card.word) || data.query;
-    if (act === "say") WW.say(word, t.getAttribute("data-accent"), t);
+    if (act === "say") WW.sayWord(data.card || { word: word }, t.getAttribute("data-accent"), t);
     else if (act === "word") WW.api().float_word(t.getAttribute("data-word"));
     else if (act === "pin") { pinned = !pinned; WW.api().float_pin(pinned); renderCard(); }
     else if (act === "open") WW.api().open_lookup(word);

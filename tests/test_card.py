@@ -91,3 +91,22 @@ def test_enrich_from_mdx_without_ecdict(tmp_path):
     assert card["found"]
     assert card["phonetic"] == {"plain": "/həˈləʊ/"}
     assert card["senses"][0] == {"pos": "int.", "text": "你好"}
+
+
+def test_mdx_audio_oxford_style():
+    from glance.dictionary.card import mdx_audio
+    html = ('<span class="phons_br"><a class="sound audio_play_button pron-uk icon-audio" '
+            'href="sound://uk_pron/a/aba/abandon__gb_1.mp3"></a>/əˈbændən/</span>'
+            '<span class="phons_n_am"><a class="sound audio_play_button pron-us icon-audio" '
+            'href="sound://us_pron/a/aba/abandon__us_1.mp3"></a></span>'
+            '<span class="x">example <a href="sound://exa/focus_x.mp3"></a></span>')
+    assert mdx_audio(html) == {"uk": "uk_pron/a/aba/abandon__gb_1.mp3",
+                               "us": "us_pron/a/aba/abandon__us_1.mp3"}
+
+
+def test_mdx_audio_by_nearby_label_and_fallback():
+    from glance.dictionary.card import mdx_audio
+    html = 'BrE /x/ <a href="sound://a1.mp3">▶</a> NAmE /y/ <a href="sound://a2.mp3">▶</a>'
+    assert mdx_audio(html) == {"uk": "a1.mp3", "us": "a2.mp3"}
+    assert mdx_audio('<a href="sound://hello.spx">▶</a>') == {"uk": "hello.spx", "us": "hello.spx"}
+    assert mdx_audio("<b>没有录音</b>") == {}

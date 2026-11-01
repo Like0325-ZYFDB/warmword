@@ -107,6 +107,15 @@
     }, el);
   };
 
+  /* 读单词：优先放词典自带的真人录音（牛津等），没有或放不了再用在线发音 / 系统语音 */
+  WW.sayWord = function (card, accent, el) {
+    accent = accent || WW.prefs.accent || "us";
+    var word = (card && card.word) || "";
+    var url = card && card.audio && (card.audio[accent] || card.audio.uk || card.audio.us);
+    if (url) WW.playUrl(url, function () { WW.say(word, accent, el); }, el);
+    else WW.say(word, accent, el);
+  };
+
   // ---------- 单词卡片 ----------
   function phonRow(card) {
     var p = card.phonetic || {}, out = [];
@@ -168,7 +177,7 @@
   };
 
   // ---------- 词典原版排版 ----------
-  var EX_SEL = ".x, .example, .examp, .exa, .eg, .sent, .sentence, .ex, .exm, .liju, .EXAMPLE, .Example, .example-sentence, .exam, .lj";
+  var EX_SEL = ".ln.ex, .x, .example, .examp, .exa, .eg, .sent, .sentence, .ex, .exm, .liju, .EXAMPLE, .Example, .example-sentence, .exam, .lj";
   var SHADOW_CSS =
     ":host{display:block}" +
     ".ww-root{zoom:var(--scale,1);font-size:14px;line-height:1.65;color:var(--text);" +
@@ -182,6 +191,23 @@
     ".ww-say{cursor:pointer;margin-left:4px;display:inline-block;width:14px;height:14px;vertical-align:-2px;opacity:.5;" +
     "background:var(--accent);-webkit-mask:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 5 6 9H3v6h3l5 4z'/%3E%3Cpath d='M15.5 8.5a5 5 0 0 1 0 7'/%3E%3C/svg%3E\") center/contain no-repeat}" +
     ".ww-say:hover{opacity:1}.playing{animation:p .5s ease 2}@keyframes p{50%{opacity:.3}}";
+  // 清晰排版：统一的层次——中文释义是重点，例句缩进弱化，编号、词性做成小标记
+  var CLEAR_CSS =
+    ".cl{zoom:var(--scale,1);font-size:14.5px;line-height:1.7;color:var(--text);font-family:var(--font);" +
+    "word-break:break-word;overflow-wrap:anywhere;user-select:text}" +
+    ".cl .ln{margin:3px 0}" +
+    ".cl .ln.meta{color:var(--text-3);font-size:13px;margin-bottom:8px}" +
+    ".cl .ln.def{margin-top:12px}.cl .ln.def:first-child,.cl .ln.meta+.ln.def{margin-top:0}" +
+    ".cl .cn{color:var(--accent-text);font-weight:600}" +
+    ".cl .ln.ex{margin:3px 0 3px 2px;padding-left:12px;border-left:2px solid var(--border);color:var(--text-2);font-size:13.5px}" +
+    ".cl .ln.ex .cn{color:var(--text-3);font-weight:400}" +
+    ".cl .num{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;margin-right:6px;" +
+    "border-radius:10px;background:var(--accent-soft);color:var(--accent-text);font-size:11.5px;font-weight:600;" +
+    "line-height:1;vertical-align:1px;font-style:normal}" +
+    ".cl .pos{font-style:italic;color:var(--text-3);margin-right:6px}" +
+    ".cl .phon{font-family:var(--font-phon);color:var(--text-2)}" +
+    ".cl .ln.sub{margin-top:16px;padding-top:10px;border-top:1px dashed var(--border);font-weight:600;color:var(--text)}" +
+    ".cl b{font-weight:600}";
   var CJK = /[　-〿㐀-鿿＀-￯]/;
 
   function englishPart(el) {
@@ -190,12 +216,22 @@
     return (m || t).trim();
   }
 
-  /* host：放内容的元素；entry：{id, html, css}；on：{word(w), href(url)} */
-  WW.rich = function (host, entry, on) {
+  /* 按设置显示一本词典的释义：清晰排版（默认）或词典原版排版 */
+  WW.entry = function (host, entry, on) {
+    var original = WW.prefs.entry_style === "original" || !entry.clear;
+    return WW.rich(host, entry, on, !original);
+  };
+
+  /* host：放内容的元素；entry：{id, html, css, clear}；on：{word(w)}；clear：用清晰排版 */
+  WW.rich = function (host, entry, on, clear) {
     on = on || {};
     var root = host.shadowRoot || host.attachShadow({ mode: "open" });
-    var links = (entry.css || []).map(function (u) { return '<link rel="stylesheet" href="' + WW.esc(u) + '">'; }).join("");
-    root.innerHTML = "<style>" + SHADOW_CSS + "</style>" + links + '<div class="ww-root">' + entry.html + "</div>";
+    if (clear) {
+      root.innerHTML = "<style>" + SHADOW_CSS + CLEAR_CSS + '</style><div class="ww-root cl">' + entry.clear + "</div>";
+    } else {
+      var links = (entry.css || []).map(function (u) { return '<link rel="stylesheet" href="' + WW.esc(u) + '">'; }).join("");
+      root.innerHTML = "<style>" + SHADOW_CSS + "</style>" + links + '<div class="ww-root">' + entry.html + "</div>";
+    }
     var box = root.querySelector(".ww-root");
     // 没有录音的例句：后面加朗读按钮
     box.querySelectorAll(EX_SEL).forEach(function (el) {

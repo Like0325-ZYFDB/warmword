@@ -171,3 +171,46 @@ def enrich_from_mdx(card: dict, entries: list) -> dict:
         card["senses"] = mdx_senses(first.html, first.headword)
         card["found"] = True
     return card
+
+
+# ---------------- 词典自带的单词录音 ----------------
+_SOUND_TAG = re.compile(r"<[^>]*?sound://([^\"'>\s]+)[^>]*>", re.I)
+_UK_MARK = re.compile(r"(?<![a-z])(uk|gb|bre|brit\w*)(?![a-z])|英", re.I)
+_US_MARK = re.compile(r"(?<![a-z])(us|ame|name|amer\w*)(?![a-z])|美", re.I)
+
+
+def _accent_of(text: str) -> str | None:
+    uk, us = _UK_MARK.search(text), _US_MARK.search(text)
+    if uk and not us:
+        return "uk"
+    if us and not uk:
+        return "us"
+    if uk and us:  # 两种标记都有：看谁更靠后（离录音按钮更近）
+        return "uk" if uk.start() > us.start() else "us"
+    return None
+
+
+def mdx_audio(html: str) -> dict:
+    """词条里单词本身的录音：{"uk": 资源路径, "us": 资源路径}。
+
+    牛津等词典的发音按钮写成 <a class="sound pron-uk" href="sound://uk/abandon__gb_1.mp3">，
+    先看按钮自身（类名、文件名），认不出再看按钮前面紧挨着的文字（BrE / NAmE / 英 / 美）。
+    取文档里最先出现的那个（词头的发音在最前面，例句录音在后面）。
+    """
+    out: dict = {}
+    first = None
+    for m in _SOUND_TAG.finditer(html or ""):
+        ref = m.group(1)
+        if first is None:
+            first = ref
+        accent = _accent_of(m.group(0))
+        if accent is None:
+            before = re.sub(r"<[^>]+>", " ", html[max(0, m.start() - 240):m.start()])
+            accent = _accent_of(before[-40:])
+        if accent and accent not in out:
+            out[accent] = ref
+        if "uk" in out and "us" in out:
+            break
+    if not out and first:
+        out = {"uk": first, "us": first}
+    return out

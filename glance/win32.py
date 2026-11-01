@@ -45,7 +45,7 @@ GWL_EXSTYLE, GWLP_HWNDPARENT = -20, -8
 WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE = 0x80, 0x40000, 0x08000000
 HWND_TOPMOST = ctypes.c_void_p(-1)
 SWP_NOSIZE, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE = 0x1, 0x2, 0x4, 0x10
-SWP_FRAMECHANGED, SWP_SHOWWINDOW, SWP_ASYNCWINDOWPOS = 0x20, 0x40, 0x4000
+SWP_FRAMECHANGED, SWP_SHOWWINDOW, SWP_HIDEWINDOW, SWP_ASYNCWINDOWPOS = 0x20, 0x40, 0x80, 0x4000
 SW_HIDE, SW_SHOWNOACTIVATE = 0, 4
 WDA_EXCLUDEFROMCAPTURE = 0x11
 
@@ -156,12 +156,22 @@ def exclude_from_capture(hwnd) -> None:
 
 def show_at(hwnd, x: int, y: int, w: int | None = None, h: int | None = None,
             activate: bool = False) -> None:
-    """放到 (x, y) 并显示，置顶；activate=False 时不抢焦点。"""
-    flags = SWP_SHOWWINDOW | (0 if activate else SWP_NOACTIVATE)
+    """放到 (x, y) 并显示，置顶；activate=False 时不抢焦点。
+
+    先摆好位置和大小，再用 ShowWindow 显示：只有 ShowWindow 会发「窗口显示了」的通知，
+    界面库收到它才会让网页控件开始绘制。只用 SetWindowPos 显示的话窗口出来了，
+    网页控件却还当自己是隐藏的，看到的就是一个白框。
+    """
+    h_ = ctypes.c_void_p(hwnd)
+    flags = SWP_NOACTIVATE
     if w is None or h is None:
         flags |= SWP_NOSIZE
         w = h = 0
-    user32.SetWindowPos(ctypes.c_void_p(hwnd), HWND_TOPMOST, int(x), int(y), int(w), int(h), flags)
+    user32.SetWindowPos(h_, HWND_TOPMOST, int(x), int(y), int(w), int(h), flags)
+    if not user32.IsWindowVisible(h_):
+        user32.ShowWindow(h_, 5 if activate else SW_SHOWNOACTIVATE)  # SW_SHOW / SW_SHOWNOACTIVATE
+    elif activate:
+        user32.SetWindowPos(h_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
 
 
 def resize(hwnd, w: int, h: int) -> None:
@@ -171,6 +181,13 @@ def resize(hwnd, w: int, h: int) -> None:
 
 def hide(hwnd) -> None:
     user32.ShowWindowAsync(ctypes.c_void_p(hwnd), SW_HIDE)
+
+
+def hide_keep_rendering(hwnd) -> None:
+    """收起窗口，但不通知界面库：网页控件仍当自己可见、照常绘制，
+    下次显示时直接是最新内容，不会先闪一下上一个词或白底。"""
+    user32.SetWindowPos(ctypes.c_void_p(hwnd), None, 0, 0, 0, 0,
+                        SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
 
 
 # ---------------- 焦点 ----------------
